@@ -1,0 +1,41 @@
+# === Rojo build output ===
+*.rbxl
+*.rbxlx
+*.rbxm
+*.rbxmx
+
+# build
+dist/
+build/
+out/
+
+# === Wally dependencies ===
+Packages/
+.wally/
+wally.lock
+
+# === Roblox Studio local files ===
+*.meta.json
+*.project.json.user
+
+# autosave / backup Roblox Studio
+AutoSaves/
+Backup/
+
+# === OS files ===
+.DS_Store
+Thumbs.db
+
+# === Editor / IDE ===
+.vscode/
+.idea/
+
+# === Logs ===
+*.log
+
+# === Temp files ===
+tmp/
+temp/
+
+# === Node ===
+node_modules/

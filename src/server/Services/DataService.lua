@@ -1,5 +1,6 @@
 -- Knit Packages
 local Knit = require(game:GetService("ReplicatedStorage").Packages.Knit)
+local HttpService = game:GetService("HttpService")
 
 -- Services
 local Players = game:GetService("Players")
@@ -59,6 +60,9 @@ local function LoadData(player: Player)
 		end)
 		if player:IsDescendantOf(Players) == true then
 			InitAndCacheProfile(player, profile)
+
+			local EggService = Knit.GetService("EggService")
+			EggService:CheckStarterEgg(player)
 		else
 			profile:Release()
 		end
@@ -99,6 +103,34 @@ function DataService:GetData(player: Player): {} | nil
 	else
 		return nil
 	end
+end
+
+function DataService:NotifyDataChanged(player: Player)
+	local data = self:GetData(player)
+	if not data then
+		return
+	end
+
+	-- self.DataChanged:Fire(player, data)
+	self.Client.DataChanged:Fire(player, data)
+end
+
+function DataService:AddMonsterToInventory(player, monsterId)
+	local profile = self:GetData(player)
+	if not profile then
+		return false
+	end
+
+	local uniqueId = HttpService:GenerateGUID(false)
+
+	profile.Monsters[uniqueId] = {
+		monsterId = monsterId,
+		Status = "Mining",
+	}
+
+	profile.MonstersIndex[monsterId] = true
+
+	return uniqueId
 end
 
 --[=[

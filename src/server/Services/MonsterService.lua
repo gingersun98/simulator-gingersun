@@ -241,8 +241,25 @@ function MonsterService:StopCoinAnimation(monsterGuid)
 		end
 
 		self.CoinAnimations[monsterGuid] = nil
-		print("Animasi loncat di coin slot untuk monster " .. monsterGuid .. " dihentikan!")
 	end
+end
+
+function MonsterService:ProcessSell(player, monsterGuid)
+	local data = self.DataService:GetData(player)
+	if not data then
+		return false
+	end
+	if self.ActiveMonsters[player] and self.ActiveMonsters[player][monsterGuid] then
+		local monsterModel = self.ActiveMonsters[player][monsterGuid]
+
+		monsterModel:Destroy()
+		self.ActiveMonsters[player][monsterGuid] = nil
+		data.Monsters[monsterGuid] = nil
+
+		return true
+	end
+
+	return false
 end
 
 return MonsterService

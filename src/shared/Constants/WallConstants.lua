@@ -3,7 +3,7 @@ local WallConstants = {}
 WallConstants.Data = {
 	["Area1"] = {
 		Name = "Wall One",
-		MaxHP = 100,
+		MaxHP = 200,
 		RequiredLayer = 1,
 	},
 

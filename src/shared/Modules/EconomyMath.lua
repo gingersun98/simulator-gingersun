@@ -2,6 +2,8 @@ local EconomyMath = {}
 
 EconomyMath.POWER_BASE_PRICE = 100
 EconomyMath.POWER_MULTIPLIER = 1.15
+EconomyMath.MINE_BASE_PRICE = 100
+EconomyMath.MINE_MULTIPLIER = 1.3
 EconomyMath.SUFFIXES = { "", "K", "M", "B", "T", "Qa", "Qi", "Sx", "Sp", "Oc", "No" }
 
 function EconomyMath.GetSingleLevelCost(basePrice, multiplier, currentLevel)
@@ -17,6 +19,24 @@ function EconomyMath.GetCumulativeUpgradeCost(basePrice, multiplier, currentLeve
 	end
 
 	return totalCost
+end
+
+function EconomyMath.GetPowerUpgradeCost(currentLevel, levelsToAdd)
+	return EconomyMath.GetCumulativeUpgradeCost(
+		EconomyMath.POWER_BASE_PRICE,
+		EconomyMath.POWER_MULTIPLIER,
+		currentLevel,
+		levelsToAdd
+	)
+end
+
+function EconomyMath.GetMineUpgradeCost(currentLevel, levelsToAdd)
+	return EconomyMath.GetCumulativeUpgradeCost(
+		EconomyMath.MINE_BASE_PRICE,
+		EconomyMath.MINE_MULTIPLIER,
+		currentLevel,
+		levelsToAdd
+	)
 end
 
 function EconomyMath.FormatNumber(n: number): string

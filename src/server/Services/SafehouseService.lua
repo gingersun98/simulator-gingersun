@@ -36,9 +36,9 @@ function SafehouseService:KnitStart()
 	self.MonsterService = Knit.GetService("MonsterService")
 
 	Players.PlayerAdded:Connect(function(player)
-		if player.UserId ~= 703574111 then
-			return
-		end
+		-- if player.UserId ~= 703574111 then
+		-- 	return
+		-- end
 		self:AssignPlot(player)
 	end)
 
@@ -74,7 +74,6 @@ function SafehouseService:AssignPlot(player)
 			end
 
 			self:SpawnInitialSafehouse(player, plot)
-			self:SetupBaseTouch(player, plot)
 
 			return
 		end
@@ -94,36 +93,6 @@ function SafehouseService:ReleasePlot(player)
 			break
 		end
 	end
-end
-
-function SafehouseService:SetupBaseTouch(player, plot)
-	local basePart = plot:FindFirstChild("Base")
-	if not basePart then
-		return
-	end
-
-	local isDebouncing = false
-
-	basePart.Touched:Connect(function(hit)
-		if isDebouncing then
-			return
-		end
-
-		-- local hitCharacter = hit.Parent
-		-- local hitPlayer = game:GetService("Players"):GetPlayerFromCharacter(hitCharacter)
-
-		-- if hitPlayer and hitPlayer == player then
-		-- 	isDebouncing = true
-
-		-- 	local hasDropped = self.EggService:ProcessDropoff(hitPlayer)
-		-- 	if hasDropped then
-		-- 		print(hitPlayer.Name .. " successfully dropped an egg at their base!")
-		-- 	end
-
-		-- 	task.wait(1)
-		-- 	isDebouncing = false
-		-- end
-	end)
 end
 
 function SafehouseService:SpawnInitialSafehouse(player, assignedPlot)
@@ -159,7 +128,127 @@ function SafehouseService:SpawnInitialSafehouse(player, assignedPlot)
 	end
 
 	self.SafehouseReady:Fire(player, playerSafehouseFolder)
+
+	self:InitUpgradeSafehouse(player)
 	self:RefreshSafehousePhysicalSlots(player)
+end
+
+function SafehouseService:InitUpgradeSafehouse(player)
+	local data = self.DataService:GetData(player)
+	if not data then
+		return
+	end
+
+	local playerSafehouse = self.ActiveSafehouses[player]
+	if not playerSafehouse then
+		return
+	end
+
+	local upgradeSafehousePrompt = playerSafehouse.Level1.Upgrade.SafehouseUpgradeMesh.SafehouseUpgradePrompt
+	if not upgradeSafehousePrompt then
+		return
+	end
+
+	local currentLevel = data.SafehouseLevel or 1
+	local nextLevel = currentLevel + 1
+	local nextLevelConfig = SafehouseConstants.Levels[nextLevel]
+
+	CollectionService:AddTag(upgradeSafehousePrompt, "SafehousePrompt")
+	upgradeSafehousePrompt:SetAttribute("OwnerName", player.Name)
+	upgradeSafehousePrompt.ObjectText = "Safehouse"
+
+	if nextLevelConfig then
+		upgradeSafehousePrompt.ActionText = "Upgrade ($" .. tostring(nextLevelConfig.UpgradeCost) .. ")"
+		upgradeSafehousePrompt.Enabled = true
+	else
+		upgradeSafehousePrompt.ActionText = "Max Level"
+		upgradeSafehousePrompt.Enabled = false
+	end
+
+	if upgradeSafehousePrompt:GetAttribute("UpgradeBound") then
+		return
+	end
+
+	upgradeSafehousePrompt:SetAttribute("UpgradeBound", true)
+
+	upgradeSafehousePrompt.Triggered:Connect(function(playerTrigger)
+		if playerTrigger ~= player then
+			warn(playerTrigger.Name .. " mencoba mengakses prompt milik " .. player.Name)
+			return
+		end
+
+		local freshData = self.DataService:GetData(playerTrigger)
+		if not freshData then
+			return
+		end
+
+		local freshCurrentLevel = freshData.SafehouseLevel or 1
+		local freshNextLevel = freshCurrentLevel + 1
+		local freshNextLevelConfig = SafehouseConstants.Levels[freshNextLevel]
+		if not freshNextLevelConfig then
+			self:InitUpgradeSafehouse(playerTrigger)
+			return
+		end
+
+		if (freshData.Money or 0) < freshNextLevelConfig.UpgradeCost then
+			return
+		end
+
+		local addedLevel = self:AddLevelToSafehouse(playerTrigger)
+		if not addedLevel then
+			return
+		end
+
+		freshData.Money -= freshNextLevelConfig.UpgradeCost
+		freshData.SafehouseLevel = freshNextLevel
+
+		if self.DataService.NotifyDataChanged then
+			self.DataService:NotifyDataChanged(playerTrigger)
+		end
+
+		self:InitUpgradeSafehouse(playerTrigger)
+	end)
+end
+
+function SafehouseService:AddLevelToSafehouse(player)
+	local data = self.DataService:GetData(player)
+	if not data then
+		return false
+	end
+
+	local playerSafehouse = self.ActiveSafehouses[player]
+	if not playerSafehouse then
+		return false
+	end
+
+	local currentLevel = data.SafehouseLevel or 1
+	local nextLevel = currentLevel + 1
+	local levelName = "Level" .. tostring(nextLevel)
+
+	local assignedPlot = nil
+	for plot, owner in pairs(self.AllocatedPlots) do
+		if owner == player then
+			assignedPlot = plot
+			break
+		end
+	end
+
+	if not assignedPlot then
+		return false
+	end
+
+	local assetModel = UpgradeAssets:FindFirstChild(levelName)
+	local targetBase = assignedPlot:FindFirstChild(levelName .. "Base")
+	if not assetModel or not targetBase then
+		warn("Missing asset or target for safehouse level: " .. levelName)
+		return false
+	end
+
+	local newModel = assetModel:Clone()
+	newModel:PivotTo(targetBase.CFrame)
+	newModel.Parent = playerSafehouse
+
+	return true
 end
 
 function SafehouseService:GiveEggToSafehouse(player, eggId, slot)
@@ -209,9 +298,23 @@ function SafehouseService:GetPhysicalSlot(player, slotIndex)
 	end
 
 	local slotName = "Slot" .. tostring(slotIndex)
-	local physicalSlot = targetPlot:FindFirstChild(slotName, true)
 
-	return physicalSlot
+	for _, levelModel in ipairs(targetPlot:GetChildren()) do
+		if levelModel:IsA("Model") and string.find(levelModel.Name, "Level") then
+			local targetSlot = levelModel:FindFirstChild(slotName, true)
+
+			if targetSlot then
+				local emissivePart = targetSlot:FindFirstChild("Emissive")
+				if emissivePart then
+					return emissivePart
+				else
+					return nil
+				end
+			end
+		end
+	end
+
+	return nil
 end
 
 function SafehouseService:RefreshSafehousePhysicalSlots(player)
@@ -248,7 +351,9 @@ function SafehouseService:RefreshSafehousePhysicalSlots(player)
 				hatchPrompt.Parent = physicalSlot
 			end
 		elseif slotObj.Type == "Monster" then
-			self:ProcessMonsterSlot(player, physicalSlot, data, slotObj.MonsterGuid)
+			print("semua slot1 ", data.SafehouseSlots)
+
+			self:ProcessMonsterSlot(player, physicalSlot, data, slotObj.MonsterGuid, slot)
 		end
 	end
 end
@@ -267,16 +372,23 @@ function SafehouseService:ProcessHatch(player, slotIndex)
 	data.SafehouseSlots[slotIndex] = { Type = "Monster", Id = monsterHatched, MonsterGuid = monsterGuid }
 
 	local physicalSlot = self:GetPhysicalSlot(player, slotIndex)
+	print("INI MARUPAKAN PHYSICAL SLOT ", physicalSlot)
 	if not physicalSlot then
 		return
 	end
 
 	physicalSlot:ClearAllChildren()
 
-	self:ProcessMonsterSlot(player, physicalSlot, data, monsterGuid)
+	self:ProcessMonsterSlot(player, physicalSlot, data, monsterGuid, slotIndex)
+	print("semua slot1 ", data.SafehouseSlots)
 end
 
-function SafehouseService:ProcessMonsterSlot(player, physicalSlot, data, monsterGuid)
+function SafehouseService:ProcessMonsterSlot(player, physicalSlot, data, monsterGuid, slotIndex)
+	if not data.Monsters[monsterGuid] then
+		print("masuk sini guys (gagal deh)")
+		return
+	end
+
 	local monsterAsset = game:GetService("ServerStorage").Monsters:FindFirstChild("Cat")
 	if monsterAsset then
 		local newMonster = monsterAsset:Clone()
@@ -309,7 +421,7 @@ function SafehouseService:ProcessMonsterSlot(player, physicalSlot, data, monster
 						promptStatus = "Breaking"
 						monsterStatus = "Mining"
 
-						local coinSlot, coinSource = self:GetCoinPlaceName(playerTrigger, physicalSlot.Name)
+						local coinSlot, coinSource = self:GetCoinPlaceName(playerTrigger, physicalSlot.Parent.Name)
 						if coinSlot then
 							self.MonsterService:UnequipMonster(player, monsterGuid, coinSlot, coinSource)
 						end
@@ -331,6 +443,29 @@ function SafehouseService:ProcessMonsterSlot(player, physicalSlot, data, monster
 			local sellPart = ServerStorage.Assets:FindFirstChild("SellPromptPart"):Clone()
 			sellPart.Parent = physicalSlot
 			sellPart:PivotTo(physicalSlot.CFrame * CFrame.new(0, 0, 0))
+
+			local sellPrompt = sellPart:FindFirstChild("SellPrompt")
+
+			if sellPrompt then
+				sellPrompt:SetAttribute("OwnerName", player.Name)
+				CollectionService:AddTag(sellPrompt, "SafehousePrompt")
+
+				sellPrompt.Triggered:Connect(function(playerTrigger)
+					if playerTrigger.Name == player.Name then
+						local hasSold = self.MonsterService:ProcessSell(playerTrigger, monsterGuid)
+						if hasSold then
+							print("slot index: " .. slotIndex)
+							print("slot yang dipilih ", data.SafehouseSlots[tostring(slotIndex)])
+							data.SafehouseSlots[tostring(slotIndex)] = nil
+							print("semua slot ", data.SafehouseSlots)
+
+							physicalSlot:ClearAllChildren()
+
+							self:RefreshSafehousePhysicalSlots(playerTrigger)
+						end
+					end
+				end)
+			end
 		end
 	end
 end
@@ -342,9 +477,23 @@ function SafehouseService:GetCoinPlaceName(player, slotName)
 	end
 
 	local playerSafehouse = self.ActiveSafehouses[player]
-	for _, coinPlace in pairs(playerSafehouse:GetDescendants()) do
-		if coinPlace.Name == slotName and coinPlace:IsA("Model") then
-			return coinPlace.Yellow, playerSafehouse.Level1.CoinSource
+	if not playerSafehouse then
+		return nil
+	end
+
+	for _, levelModel in ipairs(playerSafehouse:GetChildren()) do
+		print(levelModel)
+		if levelModel:IsA("Model") then
+			local coinPlaceFolder = levelModel:FindFirstChild("CoinPlace")
+
+			print(coinPlaceFolder)
+			if coinPlaceFolder then
+				local targetSlot = coinPlaceFolder:FindFirstChild(slotName)
+				print(targetSlot)
+				if targetSlot and targetSlot:FindFirstChild("Yellow") then
+					return targetSlot.Yellow, playerSafehouse.Level1.CoinSource
+				end
+			end
 		end
 	end
 
@@ -357,7 +506,21 @@ function SafehouseService:CreateDropPrompt(player)
 		return
 	end
 
-	local maxSlots = (data.SafehouseLevel or 1) * 4
+	local slotProgression = {
+		[1] = 2,
+		[2] = 4,
+		[3] = 4,
+		[4] = 5,
+		[5] = 6,
+		[6] = 7,
+		[7] = 8,
+	}
+
+	local currentLevel = data.SafehouseLevel
+	local maxSlots = slotProgression[currentLevel]
+
+	print("current level adalah ", currentLevel)
+	print("dan punya jumlah slot ", maxSlots)
 
 	local activePrompts = {}
 

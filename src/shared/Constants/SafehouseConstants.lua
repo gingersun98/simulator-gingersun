@@ -1,12 +1,12 @@
 local SafehouseConstants = {
 	Levels = {
-		[1] = { MaxSlots = 4, UpgradeCost = 0 },
-		[2] = { MaxSlots = 8, UpgradeCost = 5000 },
-		[3] = { MaxSlots = 12, UpgradeCost = 15000 },
-		[4] = { MaxSlots = 16, UpgradeCost = 50000 },
-		[5] = { MaxSlots = 20, UpgradeCost = 150000 },
-		[6] = { MaxSlots = 24, UpgradeCost = 500000 },
-		[7] = { MaxSlots = 28, UpgradeCost = 1500000 },
+		[1] = { MaxSlots = 2, UpgradeCost = 1 },
+		[2] = { MaxSlots = 4, UpgradeCost = 10 },
+		[3] = { MaxSlots = 4, UpgradeCost = 20 },
+		[4] = { MaxSlots = 5, UpgradeCost = 50 },
+		[5] = { MaxSlots = 6, UpgradeCost = 100 },
+		[6] = { MaxSlots = 7, UpgradeCost = 500 },
+		[7] = { MaxSlots = 8, UpgradeCost = 5000 },
 	},
 }
 

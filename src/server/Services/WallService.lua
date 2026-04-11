@@ -4,6 +4,7 @@ local Knit = require(game:GetService("ReplicatedStorage").Packages.Knit)
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local CollectionService = game:GetService("CollectionService")
 local TweenService = game:GetService("TweenService")
+local DataService = require(script.Parent.DataService)
 
 local Zone = require(ReplicatedStorage.Packages.zoneplus)
 local MonsterConstants = require(ReplicatedStorage.Shared.Constants.MonsterConstants)
@@ -53,6 +54,7 @@ function WallService:SetupZones()
 			local zone = Zone.new(zonePart)
 
 			zone.playerEntered:Connect(function(player)
+				print("masuk zone ", player.Name)
 				self.InBreakings[player] = true
 				self.ActiveBreakers[player] = wallId
 				self:RecalculatePlayerDamage(player)
@@ -77,6 +79,7 @@ function WallService:SetMonsterBreakingVisual(player, wallPart: Part, wallId)
 	end
 	local activeMonsters = self.MonsterService:GetActiveMonsters(player)
 
+	print("WALL PROGRESS DATA", data.WallProgress)
 	if not data.WallProgress[wallId] then
 		local config = WallConstants.Data[wallId]
 		data.WallProgress[wallId] = {
@@ -217,6 +220,8 @@ function WallService:SetEquipMonster(player)
 end
 
 function WallService:InitResetArea()
+	print("in breakings ", self.InBreakings)
+
 	local resetPart = workspace:FindFirstChild("BreakableWalls")
 		and workspace.BreakableWalls:FindFirstChild("ResetPart")
 
@@ -228,20 +233,19 @@ function WallService:InitResetArea()
 			local character = hit.Parent
 			local player = game:GetService("Players"):GetPlayerFromCharacter(character)
 
-			if not self.InBreakings[player] then
-				return
-			end
-
 			if player and not playerDebounce[player] then
 				playerDebounce[player] = true
 
 				self:ResetAllWalls(player)
 				self.InBreakings[player] = nil
-				print(player.Name .. " me-reset semua tembok!")
 
 				task.delay(DEBOUNCE_COOLDOWN, function()
 					playerDebounce[player] = nil
 				end)
+
+				if not self.InBreakings[player] then
+					return
+				end
 			end
 		end)
 	else
@@ -262,7 +266,7 @@ function WallService:InitEggSpawnZones()
 			self.AreaZones[areaModel.Name] = spawnZone
 			self.ActiveEggs[areaModel.Name] = {}
 
-			for i = 1, 2 do
+			for i = 1, 5 do
 				self:SpawnEggInArea(areaModel.Name)
 			end
 		end
@@ -356,6 +360,7 @@ function WallService:RemoveEggFromTracking(areaName, eggInstance)
 end
 
 function WallService:StartDamageLoop()
+	print(self.ActiveBreakers)
 	task.spawn(function()
 		while true do
 			for player, wallId in pairs(self.ActiveBreakers) do
@@ -431,6 +436,9 @@ function WallService:RecalculatePlayerDamage(player)
 	end
 
 	self.PlayerActiveDamage[player] = totalDamage
+	print("active table", self.PlayerActiveDamage[player])
+	print("in breakings", self.InBreakings[player])
+	print("active breakers", self.ActiveBreakers[player])
 end
 
 function WallService:ResetAllWalls(player)

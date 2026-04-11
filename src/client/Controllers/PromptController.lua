@@ -39,6 +39,36 @@ function PromptController:KnitStart()
 			local actionText = mainFrame:WaitForChild("ActionText")
 			local keyText = mainFrame:WaitForChild("KeyText")
 
+			local clickArea = Instance.new("TextButton")
+			clickArea.Name = "ClickArea"
+			clickArea.Size = UDim2.new(1, 0, 1, 0)
+			clickArea.BackgroundTransparency = 1
+			clickArea.Text = ""
+			clickArea.ZIndex = 10
+			clickArea.Parent = mainFrame
+
+			clickArea.InputBegan:Connect(function(input)
+				if
+					input.UserInputType == Enum.UserInputType.MouseButton1
+					or input.UserInputType == Enum.UserInputType.Touch
+				then
+					prompt:InputHoldBegan()
+				end
+			end)
+
+			clickArea.InputEnded:Connect(function(input)
+				if
+					input.UserInputType == Enum.UserInputType.MouseButton1
+					or input.UserInputType == Enum.UserInputType.Touch
+				then
+					prompt:InputHoldEnded()
+				end
+			end)
+
+			clickArea.MouseLeave:Connect(function()
+				prompt:InputHoldEnded()
+			end)
+
 			local function updateUI()
 				actionText.Text = prompt.ActionText
 				if inputType == Enum.ProximityPromptInputType.Gamepad then

@@ -9,7 +9,7 @@ return {
 
 	Upgrades = {
 		PowerLevel = 1,
-		MoneyPerSecond = 1,
+		MiningLevel = 1,
 		SafehouseLevel = 1,
 	},
 
@@ -35,7 +35,7 @@ return {
 
 -- 	Upgrades = {
 -- 		PowerLevel = 1,
--- 		MoneyPerSecond = 1,
+-- 		MiningLevel = 1,
 -- 		SafehouseLevel = 1,
 -- 	},
 

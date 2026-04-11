@@ -25,37 +25,100 @@ function UpgradeController:KnitStart()
 	local playerGui = player:WaitForChild("PlayerGui")
 
 	local framesUI = playerGui:WaitForChild("Frames")
-	local upgradeFrame = framesUI:WaitForChild("Upgrades")
-	local scrollingFrame = upgradeFrame:WaitForChild("ScrollingFrame")
-	local closeButton = upgradeFrame:WaitForChild("Close")
-	local frames = {
-		[1] = scrollingFrame:WaitForChild("Frame1"),
-		[5] = scrollingFrame:WaitForChild("Frame5"),
-		[10] = scrollingFrame:WaitForChild("Frame10"),
-	}
+	local function bindUpgradeFrame(config)
+		local frame = framesUI:WaitForChild(config.frameName)
+		local scrollingFrame = frame:WaitForChild("ScrollingFrame")
+		local closeButton = frame:WaitForChild("Close")
+		local zonePart = Workspace:WaitForChild(config.zoneName):WaitForChild("Zone")
+		local zone = Zone.new(zonePart)
 
-	upgradeFrame.Visible = false
-	UiModalEffects.SetupHoverEffect(closeButton)
+		local optionFrames = {
+			[1] = scrollingFrame:WaitForChild("Frame1"),
+			[5] = scrollingFrame:WaitForChild("Frame5"),
+			[10] = scrollingFrame:WaitForChild("Frame10"),
+		}
+
+		frame.Visible = false
+		UiModalEffects.SetupHoverEffect(closeButton)
+
+		local function updateFrameUI(data)
+			if not data or not data.Upgrades then
+				return
+			end
+
+			local currentLevel = data.Upgrades[config.levelKey] or 1
+
+			for amount, optionFrame in pairs(optionFrames) do
+				local cost = config.getCost(currentLevel, amount)
+
+				optionFrame.PowerTotal.Text = currentLevel .. " >> " .. (currentLevel + amount)
+				optionFrame.ButtonFrame.MoneyButton.TextLabel.Text = EconomyMath.FormatNumber(cost)
+				optionFrame.ButtonFrame.RobuxButton.TextLabel.Text = tostring(ROBUX_PRICES[amount])
+			end
+		end
+
+		local function openFrame()
+			if frame.Visible then
+				return
+			end
+
+			frame.Visible = true
+			UiModalEffects.PlayOpenFrame(frame)
+			UiModalEffects.OpenModal()
+		end
+
+		local function closeFrame()
+			if not frame.Visible then
+				return
+			end
+
+			frame.Visible = false
+			UiModalEffects.CloseModal()
+		end
+
+		for amount, optionFrame in pairs(optionFrames) do
+			local moneyBtn = optionFrame.ButtonFrame.MoneyButton
+			local robuxBtn = optionFrame.ButtonFrame.RobuxButton
+
+			moneyBtn.MouseButton1Click:Connect(function()
+				config.buyWithMoney(amount):catch(warn)
+			end)
+
+			robuxBtn.MouseButton1Click:Connect(function()
+				print("Prompting Robux Purchase for " .. config.frameName .. " amount: " .. amount)
+			end)
+		end
+
+		zone.localPlayerEntered:Connect(openFrame)
+		zone.localPlayerExited:Connect(closeFrame)
+		closeButton.MouseButton1Click:Connect(closeFrame)
+
+		return updateFrameUI
+	end
+
+	local updatePowerFrame = bindUpgradeFrame({
+		frameName = "Upgrades",
+		zoneName = "UpgradeZonePower",
+		levelKey = "PowerLevel",
+		getCost = EconomyMath.GetPowerUpgradeCost,
+		buyWithMoney = function(amount)
+			return UpgradeService:BuyPowerUpgrade(amount)
+		end,
+	})
+
+	local updateMineFrame = bindUpgradeFrame({
+		frameName = "MineUpgrades",
+		zoneName = "UpgradeZoneMine",
+		levelKey = "MiningLevel",
+		getCost = EconomyMath.GetMineUpgradeCost,
+		buyWithMoney = function(amount)
+			return UpgradeService:BuyMiningUpgrade(amount)
+		end,
+	})
 
 	local function UpdateUI(data)
-		if not data or not data.Upgrades then
-			return
-		end
-
-		local currentLevel = data.Upgrades.PowerLevel or 1
-
-		for amount, frame in pairs(frames) do
-			local cost = EconomyMath.GetCumulativeUpgradeCost(
-				EconomyMath.POWER_BASE_PRICE,
-				EconomyMath.POWER_MULTIPLIER,
-				currentLevel,
-				amount
-			)
-
-			frame.PowerTotal.Text = currentLevel .. " >> " .. (currentLevel + amount)
-			frame.ButtonFrame.MoneyButton.TextLabel.Text = EconomyMath.FormatNumber(cost)
-			frame.ButtonFrame.RobuxButton.TextLabel.Text = tostring(ROBUX_PRICES[amount])
-		end
+		updatePowerFrame(data)
+		updateMineFrame(data)
 	end
 
 	DataService:GetData()
@@ -68,50 +131,6 @@ function UpgradeController:KnitStart()
 		UpdateUI(newData)
 	end)
 
-	for amount, frame in pairs(frames) do
-		local moneyBtn = frame.ButtonFrame.MoneyButton
-		local robuxBtn = frame.ButtonFrame.RobuxButton
-
-		moneyBtn.MouseButton1Click:Connect(function()
-			UpgradeService:BuyPowerUpgrade(amount):catch(warn)
-		end)
-
-		robuxBtn.MouseButton1Click:Connect(function()
-			print("Prompting Robux Purchase for amount: " .. amount)
-		end)
-	end
-
-	local function openUpgradeUI()
-		if upgradeFrame.Visible then
-			return
-		end
-
-		upgradeFrame.Visible = true
-		UiModalEffects.PlayOpenFrame(upgradeFrame)
-		UiModalEffects.OpenModal()
-	end
-
-	local function closeUpgradeUI()
-		if not upgradeFrame.Visible then
-			return
-		end
-
-		upgradeFrame.Visible = false
-		UiModalEffects.CloseModal()
-	end
-
-	local zonePart = Workspace:WaitForChild("UpgradeZonePower"):WaitForChild("Zone")
-	local upgradeZone = Zone.new(zonePart)
-
-	upgradeZone.localPlayerEntered:Connect(function()
-		openUpgradeUI()
-	end)
-
-	upgradeZone.localPlayerExited:Connect(function()
-		closeUpgradeUI()
-	end)
-
-	closeButton.MouseButton1Click:Connect(closeUpgradeUI)
 end
 
 function UpgradeController:KnitInit()

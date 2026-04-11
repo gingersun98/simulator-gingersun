@@ -31,7 +31,8 @@ function MiningService:SetupCoinCollector(player, physicalSafehouse)
 		return
 	end
 
-	local collectPart: Part = physicalSafehouse:WaitForChild("Level1"):WaitForChild("CollectCoin"):WaitForChild("Green")
+	local collectPart: MeshPart =
+		physicalSafehouse:WaitForChild("Level1"):WaitForChild("CollectCoin"):WaitForChild("Green")
 
 	local isCollecting = false
 
@@ -69,7 +70,7 @@ function MiningService:ProcessMining()
 			continue
 		end
 
-		local playerPower = profile.Upgrades.PowerLevel or 1
+		local playerMineLevel = profile.Upgrades.MiningLevel or 1
 		local totalIncomeThisSecond = 0
 
 		for _, monsterData in pairs(profile.Monsters) do
@@ -78,7 +79,7 @@ function MiningService:ProcessMining()
 				local constantData = MonsterConstants.Data[monsterId]
 
 				if constantData then
-					local monsterPower = playerPower * constantData.BaseMultiplier * 100
+					local monsterPower = playerMineLevel * constantData.BaseMultiplier * 100
 					totalIncomeThisSecond += monsterPower
 				end
 			end

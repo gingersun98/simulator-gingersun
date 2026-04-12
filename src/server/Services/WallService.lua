@@ -160,24 +160,15 @@ function WallService:SetMonsterBreakingVisual(player, wallPart: Part, wallId)
 	end
 
 	local rng = Random.new()
-	local IDLE_BACK_OFFSET = 8 -- Jarak monster standby mundur dari tembok
-	local ATTACK_BACK_OFFSET = 2 -- Jarak monster attack menempel tembok
+	local IDLE_BACK_OFFSET = 8
+	local ATTACK_BACK_OFFSET = 2
 	local SPREAD_X = 8
 
-	local attackInfo = TweenInfo.new(
-		0.15, -- Waktu maju (cepat)
-		Enum.EasingStyle.Sine, -- Gaya Easing
-		Enum.EasingDirection.Out -- Arah Easing
-	)
+	local attackInfo = TweenInfo.new(0.15, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
 
-	local retreatInfo = TweenInfo.new(
-		0.5, -- Waktu mundur (lebih lama)
-		Enum.EasingStyle.Sine,
-		Enum.EasingDirection.In
-	)
+	local retreatInfo = TweenInfo.new(0.5, Enum.EasingStyle.Sine, Enum.EasingDirection.In)
 
 	for monsterGuid, monsterPhysic in pairs(activeMonsters) do
-		-- Pastikan statusnya Breaking
 		if data.Monsters[monsterGuid].Status == "Breaking" then
 			local petRoot = getMonsterControlRoot(monsterPhysic)
 
@@ -210,24 +201,19 @@ function WallService:SetMonsterBreakingVisual(player, wallPart: Part, wallId)
 						CurrentTween = nil,
 					}
 
-					-- 2. Mulai Loop Animasi
 					local animationThread = task.spawn(function()
 						while data.Monsters[monsterGuid].Status == "Breaking" and wallPart.Parent do
-							-- A. Tween Maju Cepat
 							local attackTween =
 								TweenService:Create(alignPos, attackInfo, { Position = attackTargetPos })
 
-							-- SEKARANG INI AMAN (Tidak akan nil lagi)
 							self.ActiveAnimations[monsterGuid].CurrentTween = attackTween
 							attackTween:Play()
 							attackTween.Completed:Wait()
 
-							-- B. Tween Mundur Lambat
 							alignPos.MaxVelocity = 20000
 							local retreatTween =
 								TweenService:Create(alignPos, retreatInfo, { Position = idleTargetPos })
 
-							-- UPDATE TWEEN MUNDUR
 							self.ActiveAnimations[monsterGuid].CurrentTween = retreatTween
 							retreatTween:Play()
 							retreatTween.Completed:Wait()
@@ -236,12 +222,9 @@ function WallService:SetMonsterBreakingVisual(player, wallPart: Part, wallId)
 							task.wait(rng:NextNumber(0.1, 0.3))
 						end
 
-						-- Jika berhenti secara natural (status berubah / tembok hancur), bersihkan data
 						self.ActiveAnimations[monsterGuid] = nil
 					end)
 
-					-- 3. SIMPAN THREAD NYA SETELAH task.spawn
-					-- Masukkan referensi thread ke dalam tabel yang sudah kita buat tadi
 					self.ActiveAnimations[monsterGuid].Thread = animationThread
 				end
 			end
@@ -253,18 +236,14 @@ function WallService:StopMonsterAnimation(monsterGuid)
 	local animData = self.ActiveAnimations[monsterGuid]
 
 	if animData then
-		-- 1. Batalkan Tween yang sedang berjalan seketika
-		-- (Ini mencegah monster terus meluncur meskipun loop dimatikan)
 		if animData.CurrentTween then
 			animData.CurrentTween:Cancel()
 		end
 
-		-- 2. Matikan paksa thread/loop dari task.spawn
 		if animData.Thread then
 			task.cancel(animData.Thread)
 		end
 
-		-- 3. Hapus dari memori
 		self.ActiveAnimations[monsterGuid] = nil
 	end
 end
@@ -336,7 +315,7 @@ end
 function WallService:GetSafeRandomPoint(areaName, padding)
 	local zone = self.AreaZones[areaName]
 	local activeEggs = self.ActiveEggs[areaName]
-	local maxAttempts = 10 -- Batasi percobaan agar tidak infinite loop jika area penuh
+	local maxAttempts = 10
 
 	for _ = 1, maxAttempts do
 		local point = zone:getRandomPoint()
@@ -544,10 +523,7 @@ function WallService:RecalculatePlayerDamage(player)
 		end
 	end
 
-	self.PlayerActiveDamage[player] = totalDamage
-	print("active table", self.PlayerActiveDamage[player])
-	print("in breakings", self.InBreakings[player])
-	print("active breakers", self.ActiveBreakers[player])
+	self.PlayerActiveDamage[player] = totalDamage + playerPower
 end
 
 function WallService:ResetAllWalls(player)

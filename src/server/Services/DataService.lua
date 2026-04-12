@@ -137,7 +137,6 @@ end
 	Initializes player added and removing events
 ]=]
 function DataService:KnitInit()
-	print("DataService is running!")
 	local function playerAdded(player: Player)
 		LoadData(player)
 	end

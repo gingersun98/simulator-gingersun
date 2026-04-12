@@ -38,7 +38,6 @@ local function rollRarityFromEgg(eggId)
 	for rarity, chance in pairs(eggData.HatchRates) do
 		currentWeight += chance
 		if rng <= currentWeight then
-			print("[PRINT!] Rolled rarity: " .. rarity)
 			return rarity
 		end
 	end
@@ -65,7 +64,6 @@ local function rollMonsterFromRarity(targetRarity)
 	for _, data in ipairs(rollTable) do
 		currentWeight += data.chance
 		if rng <= currentWeight then
-			print("[PRINT!] Rolled monster: " .. data.id)
 			return data.id
 		end
 	end
@@ -118,6 +116,10 @@ function EggService:ProcessPickup(player, eggInstance)
 	player:SetAttribute("IsHoldingEgg", true)
 
 	return true
+end
+
+function EggService:IsPlayerHoldingEgg(player)
+	return self.PlayerHoldingStates[player] and self.PlayerHoldingStates[player].State == "Holding"
 end
 
 function EggService:ProcessDropoff(player, slot)

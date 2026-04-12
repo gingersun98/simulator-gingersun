@@ -621,12 +621,14 @@ function SafehouseService:ProcessMonsterSlot(player, physicalSlot, data, monster
 					if playerTrigger.Name == player.Name then
 						local hasSold = self.MonsterService:ProcessSell(playerTrigger, monsterGuid)
 						if hasSold then
-							print("slot index: " .. slotIndex)
-							print("slot yang dipilih ", data.SafehouseSlots[tostring(slotIndex)])
 							data.SafehouseSlots[tostring(slotIndex)] = nil
-							print("semua slot ", data.SafehouseSlots)
 
 							physicalSlot:ClearAllChildren()
+
+							local isPlayerHoldingEgg = self.EggService:IsPlayerHoldingEgg(playerTrigger)
+							if isPlayerHoldingEgg then
+								self:CreateDropPrompt(playerTrigger)
+							end
 
 							self:RefreshSafehousePhysicalSlots(playerTrigger)
 						end

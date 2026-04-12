@@ -89,7 +89,7 @@ function MiningService:ProcessMining()
 		end
 
 		if totalIncomeThisSecond > 0 then
-			profile.PendingMoney += totalIncomeThisSecond
+			profile.PendingMoney += totalIncomeThisSecond + playerMineLevel
 			self.DataService:NotifyDataChanged(player)
 			-- print(player.Name .. " earned " .. totalIncomeThisSecond .. " money from mining! Total: " .. profile.Money)
 		end

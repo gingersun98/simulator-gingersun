@@ -518,7 +518,7 @@ function SafehouseService:ProcessHatch(player, slotIndex)
 	self.DataService:NotifyDataChanged(player)
 
 	local physicalSlot = self:GetPhysicalSlot(player, slotIndex)
-	print(physicalSlot) -- taruh ReplicatedStorage/Assets/Sounds/EggHatch (sound) dan ReplicatedStorage/Assets/VFX/HatchParticle (particle emitter) di dalam part ini (physicalslot (meshpart)) di controller client dan di play
+	print(physicalSlot)
 	if not physicalSlot then
 		return
 	end

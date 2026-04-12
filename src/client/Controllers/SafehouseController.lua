@@ -19,7 +19,7 @@ local COIN_FX_MIN_INTERVAL = 0.7
 local COIN_FX_MAX_INTERVAL = 1.8
 local COIN_PARTICLE_MIN_EMIT = 2
 local COIN_PARTICLE_MAX_EMIT = 5
-local HATCH_PARTICLE_EMIT_COUNT = 20
+local HATCH_PARTICLE_EMIT_COUNT = 5
 local UPGRADE_HOME_SOUND_TEMPLATE =
 	ReplicatedStorage:WaitForChild("Assets"):WaitForChild("Sounds"):WaitForChild("UpgradeHome")
 local EGG_HATCH_SOUND_TEMPLATE =
@@ -264,6 +264,10 @@ function SafehouseController:KnitStart()
 		end
 
 		if hatchParticle:IsA("ParticleEmitter") then
+			-- Force one-shot hatch effect even if template uses continuous emission settings.
+			hatchParticle.Enabled = false
+			hatchParticle.Rate = 0
+			hatchParticle:Clear()
 			hatchParticle:Emit(HATCH_PARTICLE_EMIT_COUNT)
 		end
 	end

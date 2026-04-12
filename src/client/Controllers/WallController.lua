@@ -2,6 +2,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 local Debris = game:GetService("Debris")
+local SoundService = game:GetService("SoundService")
 
 local Packages = ReplicatedStorage.Packages
 local Knit = require(Packages.Knit)
@@ -112,6 +113,13 @@ local function triggerShatter(wallArea: Instance)
 	local sound = wall:FindFirstChild("WallDestroy")
 	if sound and sound:IsA("Sound") then
 		sound:Play()
+
+		local fallback = sound:Clone()
+		fallback.Name = "WallDestroy_Local"
+		fallback.RollOffMode = Enum.RollOffMode.Linear
+		fallback.Parent = SoundService
+		fallback:Play()
+		Debris:AddItem(fallback, math.max(fallback.TimeLength, 1) + 0.25)
 	end
 
 	for _ = 1, SHATTER_CONFIG.DebrisCount do

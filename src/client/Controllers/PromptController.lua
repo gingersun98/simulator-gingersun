@@ -14,6 +14,10 @@ function PromptController:KnitStart()
 	local player = Players.LocalPlayer
 	local playerGui = player:WaitForChild("PlayerGui")
 	local equipSoundTemplate = ReplicatedStorage:WaitForChild("Assets"):WaitForChild("Sounds"):WaitForChild("EquipPet")
+	local eggHatchSoundTemplate =
+		ReplicatedStorage:WaitForChild("Assets"):WaitForChild("Sounds"):WaitForChild("EggHatch")
+	local hatchParticleTemplate =
+		ReplicatedStorage:WaitForChild("Assets"):WaitForChild("VFX"):WaitForChild("HatchParticle")
 
 	local defaultUI = playerGui:WaitForChild("CustomPromptUI")
 	defaultUI.Enabled = false
@@ -156,11 +160,40 @@ function PromptController:KnitStart()
 		end
 	end)
 
-	ProximityPromptService.PromptTriggered:Connect(function()
+	ProximityPromptService.PromptTriggered:Connect(function(prompt)
 		local soundClone = equipSoundTemplate:Clone()
 		soundClone.Parent = SoundService
 		soundClone:Play()
 		Debris:AddItem(soundClone, math.max(soundClone.TimeLength, 1) + 0.25)
+
+		if prompt and prompt.Name == "HatchPrompt" then
+			local hatchSoundClone = eggHatchSoundTemplate:Clone()
+			hatchSoundClone.Parent = SoundService
+			hatchSoundClone:Play()
+			Debris:AddItem(hatchSoundClone, math.max(hatchSoundClone.TimeLength, 1) + 0.25)
+
+			local emitterParent = nil
+			if prompt.Parent and (prompt.Parent:IsA("BasePart") or prompt.Parent:IsA("Attachment")) then
+				emitterParent = prompt.Parent
+			else
+				emitterParent = prompt:FindFirstAncestorWhichIsA("BasePart")
+			end
+
+			if emitterParent then
+				local hatchEmitter = hatchParticleTemplate:Clone()
+				hatchEmitter.Name = "PromptHatchParticle"
+				hatchEmitter.Parent = emitterParent
+
+				if hatchEmitter:IsA("ParticleEmitter") then
+					hatchEmitter.Enabled = false
+					hatchEmitter.Rate = 0
+					hatchEmitter:Clear()
+					hatchEmitter:Emit(30)
+				end
+
+				Debris:AddItem(hatchEmitter, 2)
+			end
+		end
 	end)
 end
 

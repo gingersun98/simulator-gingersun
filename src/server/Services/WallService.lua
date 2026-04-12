@@ -512,6 +512,7 @@ function WallService:RecalculatePlayerDamage(player)
 	local totalDamage = 0
 
 	for _, monsterObj in pairs(data.Monsters or {}) do
+		print(monsterObj)
 		if monsterObj.Status == "Breaking" then
 			local monsterId = monsterObj.monsterId
 			local monsterMultiplier = MonsterConstants.Data[monsterId].BaseMultiplier
@@ -533,6 +534,8 @@ function WallService:ResetAllWalls(player)
 	if not data.WallProgress then
 		return
 	end
+
+	self.PlayerActiveDamage[player] = nil
 
 	for wallId, wallData in pairs(data.WallProgress) do
 		if wallData.IsDestroyed then

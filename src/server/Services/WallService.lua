@@ -3,22 +3,85 @@ local Knit = require(game:GetService("ReplicatedStorage").Packages.Knit)
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local CollectionService = game:GetService("CollectionService")
+local ServerStorage = game:GetService("ServerStorage")
 local TweenService = game:GetService("TweenService")
-local DataService = require(script.Parent.DataService)
+
+local EggAssets: Folder = ServerStorage:WaitForChild("Assets"):WaitForChild("Eggs")
+local EggTitleGuiTemplate = ServerStorage:WaitForChild("Assets"):WaitForChild("EggTitleGUI")
 
 local Zone = require(ReplicatedStorage.Packages.zoneplus)
 local MonsterConstants = require(ReplicatedStorage.Shared.Constants.MonsterConstants)
+local EggConstants = require(ReplicatedStorage.Shared.Constants.EggConstants)
 
 local WallConstants = require(ReplicatedStorage.Shared.Constants.WallConstants)
 
 local WallService = Knit.CreateService({
 	Name = "WallService",
 	Client = {
-		WallDamaged = Knit.CreateSignal(),
 		WallDestroyed = Knit.CreateSignal(),
+		WallDamaged = Knit.CreateSignal(),
 		WallReset = Knit.CreateSignal(),
 	},
 })
+
+local function getMonsterControlRoot(monsterModel: Model): BasePart?
+	for _, descendant in ipairs(monsterModel:GetDescendants()) do
+		if descendant:IsA("BasePart") then
+			local hasAlignPos = descendant:FindFirstChild("AlignPosition")
+			local hasAlignOri = descendant:FindFirstChild("AlignOrientation")
+			if hasAlignPos and hasAlignOri then
+				return descendant
+			end
+		end
+	end
+
+	if monsterModel.PrimaryPart then
+		return monsterModel.PrimaryPart
+	end
+
+	local humanoidRoot = monsterModel:FindFirstChild("HumanoidRootPart")
+	if humanoidRoot and humanoidRoot:IsA("BasePart") then
+		return humanoidRoot
+	end
+
+	local anyPart = monsterModel:FindFirstChildWhichIsA("BasePart", true)
+	if anyPart and anyPart:IsA("BasePart") then
+		return anyPart
+	end
+
+	return nil
+end
+
+local function attachEggTitleGui(eggModel: Model, eggId: string)
+	local eggRoot = eggModel.PrimaryPart or eggModel:FindFirstChildWhichIsA("BasePart", true)
+	if not eggRoot then
+		return
+	end
+
+	local eggConfig = EggConstants.Eggs[eggId]
+	local displayName = eggConfig and eggConfig.Name or eggId
+	local uiLevel = eggConfig and eggConfig.UILevel or ""
+	local uiRarity = eggConfig and eggConfig.UIRarity or ""
+	local finalName = displayName
+	if uiLevel ~= "" then
+		finalName ..= " " .. uiLevel
+	end
+
+	local titleGui = EggTitleGuiTemplate:Clone()
+	local mainFrame = titleGui:FindFirstChild("MainFrame", true)
+	local eggNameText = mainFrame and mainFrame:FindFirstChild("EggNameText", true)
+	local eggRarityText = mainFrame and mainFrame:FindFirstChild("EggRarityText", true)
+
+	if eggNameText and eggNameText:IsA("TextLabel") then
+		eggNameText.Text = finalName
+	end
+
+	if eggRarityText and eggRarityText:IsA("TextLabel") then
+		eggRarityText.Text = uiRarity
+	end
+
+	titleGui.Parent = eggRoot
+end
 
 function WallService:KnitInit()
 	self.ActiveBreakers = {}
@@ -116,8 +179,7 @@ function WallService:SetMonsterBreakingVisual(player, wallPart: Part, wallId)
 	for monsterGuid, monsterPhysic in pairs(activeMonsters) do
 		-- Pastikan statusnya Breaking
 		if data.Monsters[monsterGuid].Status == "Breaking" then
-			local petRoot = monsterPhysic:FindFirstChildOfClass("MeshPart")
-				or monsterPhysic:FindFirstChild("HumanoidRootPart")
+			local petRoot = getMonsterControlRoot(monsterPhysic)
 
 			if petRoot then
 				local alignPos = petRoot:FindFirstChild("AlignPosition")
@@ -211,7 +273,7 @@ function WallService:SetEquipMonster(player)
 	local data = self.DataService:GetData(player)
 	local activeMonsters = self.MonsterService:GetActiveMonsters(player)
 
-	for monsterGuid, monsterPhysic in pairs(activeMonsters) do
+	for monsterGuid, _ in pairs(activeMonsters) do
 		if data.Monsters[monsterGuid].Status == "Breaking" then
 			self:StopMonsterAnimation(monsterGuid)
 			self.MonsterService:EquipMonster(player, monsterGuid)
@@ -266,9 +328,7 @@ function WallService:InitEggSpawnZones()
 			self.AreaZones[areaModel.Name] = spawnZone
 			self.ActiveEggs[areaModel.Name] = {}
 
-			for i = 1, 5 do
-				self:SpawnEggInArea(areaModel.Name)
-			end
+			self:SpawnEggInArea(areaModel.Name)
 		end
 	end
 end
@@ -278,7 +338,7 @@ function WallService:GetSafeRandomPoint(areaName, padding)
 	local activeEggs = self.ActiveEggs[areaName]
 	local maxAttempts = 10 -- Batasi percobaan agar tidak infinite loop jika area penuh
 
-	for i = 1, maxAttempts do
+	for _ = 1, maxAttempts do
 		local point = zone:getRandomPoint()
 		local isSafe = true
 
@@ -298,46 +358,94 @@ function WallService:GetSafeRandomPoint(areaName, padding)
 	return nil
 end
 
-function WallService:SpawnEggInArea(areaName)
-	local eggAsset: Model = game:GetService("ServerStorage").Eggs:FindFirstChild("BlueEggInSpawn")
+local function getAreaNumber(areaName: string)
+	local digits = string.match(areaName, "%d+")
+	if not digits then
+		return nil
+	end
+
+	return tonumber(digits)
+end
+
+function WallService:SpawnEggInArea(areaName, forcedEggName)
 	local padding = 5
 
-	if self.AreaZones[areaName] and eggAsset then
-		local safePoint = self:GetSafeRandomPoint(areaName, padding)
-
-		if safePoint then
-			local newEgg = eggAsset:Clone()
-			newEgg:PivotTo(CFrame.new(safePoint) * CFrame.new(0, 2, 0))
-			newEgg.Parent = workspace.BreakableWalls[areaName]
-
-			table.insert(self.ActiveEggs[areaName], {
-				Instance = newEgg,
-				Position = safePoint,
-			})
-
-			local prompt = newEgg.BlueEgg:FindFirstChildOfClass("ProximityPrompt")
-			prompt.ActionText = "Take Egg"
-			prompt.ObjectText = "Egg"
-
-			CollectionService:AddTag(prompt, "EggPickupPrompt")
-
-			prompt.Triggered:Connect(function(player)
-				if player:GetAttribute("IsHoldingEgg") == true then
-					return
-				end
-
-				self:HandleEggPickup(player, newEgg)
-			end)
-
-			newEgg.AncestryChanged:Connect(function(_, parent)
-				if not parent then
-					self:RemoveEggFromTracking(areaName, newEgg)
-				end
-			end)
-		else
-			warn("Could not find safe spawn point for Egg in " .. areaName)
-		end
+	if not self.AreaZones[areaName] then
+		return
 	end
+
+	if not forcedEggName then
+		local areaNumber = getAreaNumber(areaName)
+		local areaConfig = areaNumber and EggConstants.AreaConfig[areaNumber]
+		if not areaConfig then
+			warn("Missing AreaConfig for " .. areaName)
+			return
+		end
+
+		for _, eggName in ipairs(areaConfig.Eggs) do
+			for _ = 1, 2 do
+				self:SpawnEggInArea(areaName, eggName)
+			end
+		end
+
+		return
+	end
+
+	local eggAsset = EggAssets:FindFirstChild(forcedEggName)
+	if not eggAsset or not eggAsset:IsA("Model") then
+		warn("Egg asset not found: " .. tostring(forcedEggName))
+		return
+	end
+
+	local safePoint = self:GetSafeRandomPoint(areaName, padding)
+	if not safePoint then
+		warn("Could not find safe spawn point for Egg in " .. areaName)
+		return
+	end
+
+	local newEgg = eggAsset:Clone()
+	newEgg.Name = forcedEggName
+	newEgg:PivotTo(CFrame.new(safePoint) * CFrame.new(0, 2, 0))
+	newEgg.Parent = workspace.BreakableWalls[areaName]
+	attachEggTitleGui(newEgg, forcedEggName)
+
+	table.insert(self.ActiveEggs[areaName], {
+		Instance = newEgg,
+		Position = safePoint,
+		EggName = forcedEggName,
+	})
+
+	local eggRoot = newEgg.PrimaryPart or newEgg:FindFirstChildWhichIsA("BasePart", true)
+	if not eggRoot then
+		warn("Egg model has no BasePart root: " .. forcedEggName)
+		newEgg:Destroy()
+		return
+	end
+
+	local prompt = Instance.new("ProximityPrompt")
+	prompt.Style = Enum.ProximityPromptStyle.Custom
+	prompt.ActionText = "Take Egg"
+	prompt.ObjectText = "Egg"
+	prompt.RequiresLineOfSight = false
+	prompt.MaxActivationDistance = 8
+	prompt.HoldDuration = 0.2
+	prompt.Parent = eggRoot
+
+	CollectionService:AddTag(prompt, "EggPickupPrompt")
+
+	prompt.Triggered:Connect(function(player)
+		if player:GetAttribute("IsHoldingEgg") == true then
+			return
+		end
+
+		self:HandleEggPickup(player, newEgg)
+	end)
+
+	newEgg.AncestryChanged:Connect(function(_, parent)
+		if not parent then
+			self:RemoveEggFromTracking(areaName, newEgg)
+		end
+	end)
 end
 
 function WallService:RemoveEggFromTracking(areaName, eggInstance)
@@ -348,10 +456,11 @@ function WallService:RemoveEggFromTracking(areaName, eggInstance)
 
 	for i, eggData in ipairs(eggs) do
 		if eggData.Instance == eggInstance then
+			local respawnEggName = eggData.EggName
 			table.remove(eggs, i)
 
 			task.delay(5, function()
-				self:SpawnEggInArea(areaName)
+				self:SpawnEggInArea(areaName, respawnEggName)
 			end)
 
 			break
@@ -427,7 +536,7 @@ function WallService:RecalculatePlayerDamage(player)
 	for _, monsterObj in pairs(data.Monsters or {}) do
 		if monsterObj.Status == "Breaking" then
 			local monsterId = monsterObj.monsterId
-			local monsterMultiplier = MonsterConstants.Data[monsterId].BaseMultiplier * 10
+			local monsterMultiplier = MonsterConstants.Data[monsterId].BaseMultiplier
 
 			local individualDamage = playerPower * monsterMultiplier
 
@@ -463,6 +572,7 @@ function WallService:HandleEggPickup(player, eggInstance)
 	local EggService = Knit.GetService("EggService")
 	local processPickup = EggService:ProcessPickup(player, eggInstance)
 
+	print("INSTANSI", eggInstance)
 	self.SafehouseService:CreateDropPrompt(player)
 
 	if processPickup then

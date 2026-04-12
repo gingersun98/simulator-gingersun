@@ -1,11 +1,17 @@
 local Knit = require(game:GetService("ReplicatedStorage").Packages.Knit)
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
+local MarketplaceService = game:GetService("MarketplaceService")
+local Debris = game:GetService("Debris")
+local SoundService = game:GetService("SoundService")
 local UiModalEffects = require(script.Parent.Parent.Modules.UiModalEffects)
+local CashPurchaseEffect = require(script.Parent.Parent:WaitForChild("Modules"):WaitForChild("CashPurchaseEffect"))
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Zone = require(ReplicatedStorage.Packages.zoneplus)
 local EconomyMath = require(ReplicatedStorage.Shared.Modules.EconomyMath)
+
+local CLICK_SOUND_TEMPLATE = ReplicatedStorage:WaitForChild("Assets"):WaitForChild("Sounds"):WaitForChild("Click")
 
 local UpgradeController = Knit.CreateController({
 	Name = "UpgradeController",
@@ -17,9 +23,29 @@ local ROBUX_PRICES = {
 	[10] = 38,
 }
 
+local ROBUX_PRODUCT_IDS = {
+	Power = {
+		[1] = 3574575697,
+		[5] = 3574576195,
+		[10] = 3574576644,
+	},
+	Mining = {
+		[1] = 3574577388,
+		[5] = 3574577673,
+		[10] = 3574577826,
+	},
+}
+
 function UpgradeController:KnitStart()
 	local DataService = Knit.GetService("DataService")
 	local UpgradeService = Knit.GetService("UpgradeService")
+
+	local function playClickSound()
+		local soundClone = CLICK_SOUND_TEMPLATE:Clone()
+		soundClone.Parent = SoundService
+		soundClone:Play()
+		Debris:AddItem(soundClone, math.max(soundClone.TimeLength, 1) + 0.25)
+	end
 
 	local player = Players.LocalPlayer
 	local playerGui = player:WaitForChild("PlayerGui")
@@ -80,18 +106,37 @@ function UpgradeController:KnitStart()
 			local moneyBtn = optionFrame.ButtonFrame.MoneyButton
 			local robuxBtn = optionFrame.ButtonFrame.RobuxButton
 
+			UiModalEffects.SetupHoverEffect(moneyBtn)
+			UiModalEffects.SetupHoverEffect(robuxBtn)
+
 			moneyBtn.MouseButton1Click:Connect(function()
-				config.buyWithMoney(amount):catch(warn)
+				playClickSound()
+				config
+					.buyWithMoney(amount)
+					:andThen(function()
+						CashPurchaseEffect.Play()
+					end)
+					:catch(warn)
 			end)
 
 			robuxBtn.MouseButton1Click:Connect(function()
-				print("Prompting Robux Purchase for " .. config.frameName .. " amount: " .. amount)
+				playClickSound()
+				local productId = config.robuxProductIds and config.robuxProductIds[amount]
+				if not productId then
+					warn("Missing Robux product id for " .. config.frameName .. " amount: " .. tostring(amount))
+					return
+				end
+
+				MarketplaceService:PromptProductPurchase(player, productId)
 			end)
 		end
 
 		zone.localPlayerEntered:Connect(openFrame)
 		zone.localPlayerExited:Connect(closeFrame)
-		closeButton.MouseButton1Click:Connect(closeFrame)
+		closeButton.MouseButton1Click:Connect(function()
+			playClickSound()
+			closeFrame()
+		end)
 
 		return updateFrameUI
 	end
@@ -101,6 +146,7 @@ function UpgradeController:KnitStart()
 		zoneName = "UpgradeZonePower",
 		levelKey = "PowerLevel",
 		getCost = EconomyMath.GetPowerUpgradeCost,
+		robuxProductIds = ROBUX_PRODUCT_IDS.Power,
 		buyWithMoney = function(amount)
 			return UpgradeService:BuyPowerUpgrade(amount)
 		end,
@@ -111,6 +157,7 @@ function UpgradeController:KnitStart()
 		zoneName = "UpgradeZoneMine",
 		levelKey = "MiningLevel",
 		getCost = EconomyMath.GetMineUpgradeCost,
+		robuxProductIds = ROBUX_PRODUCT_IDS.Mining,
 		buyWithMoney = function(amount)
 			return UpgradeService:BuyMiningUpgrade(amount)
 		end,
@@ -130,7 +177,6 @@ function UpgradeController:KnitStart()
 	DataService.DataChanged:Connect(function(newData)
 		UpdateUI(newData)
 	end)
-
 end
 
 function UpgradeController:KnitInit()

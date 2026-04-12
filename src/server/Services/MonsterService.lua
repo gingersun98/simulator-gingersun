@@ -2,14 +2,47 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerStorage = game:GetService("ServerStorage")
 local TweenService = game:GetService("TweenService")
 
+local MonsterAssets: Folder = ServerStorage:WaitForChild("Assets"):WaitForChild("Monsters")
+
 local Players = game:GetService("Players")
 local Knit = require(ReplicatedStorage.Packages.Knit)
+local MonsterConstants = require(ReplicatedStorage.Shared.Constants.MonsterConstants)
 
 local MonsterService = Knit.CreateService({
 	Name = "MonsterService",
 	Client = {},
 	ActiveMonsters = {},
 })
+
+local function getMonsterRoot(model: Model): BasePart?
+	if model.PrimaryPart then
+		return model.PrimaryPart
+	end
+
+	local humanoidRoot = model:FindFirstChild("HumanoidRootPart")
+	if humanoidRoot and humanoidRoot:IsA("BasePart") then
+		return humanoidRoot
+	end
+
+	local meshRoot = model:FindFirstChildOfClass("MeshPart")
+	if meshRoot then
+		return meshRoot
+	end
+
+	local anyPart = model:FindFirstChildWhichIsA("BasePart", true)
+	if anyPart and anyPart:IsA("BasePart") then
+		return anyPart
+	end
+
+	return nil
+end
+
+local function pivotModelRootTo(model: Model, root: BasePart, targetRootCFrame: CFrame)
+	local currentPivot = model:GetPivot()
+	local pivotToRoot = currentPivot:ToObjectSpace(root.CFrame)
+	local targetPivot = targetRootCFrame * pivotToRoot:Inverse()
+	model:PivotTo(targetPivot)
+end
 
 function MonsterService:KnitStart()
 	self.DataService = Knit.GetService("DataService")
@@ -54,38 +87,57 @@ function MonsterService:SpawnMonster(player, monsterGuid)
 	end
 
 	local monsterId = data.Monsters[monsterGuid].monsterId
-	local monsterAsset = ServerStorage.Monsters:FindFirstChild("Cat")
+	local monsterAsset = MonsterAssets:FindFirstChild(monsterId)
+	print("monster id", monsterId)
 
 	if monsterAsset then
 		local clone = monsterAsset:Clone()
-		local petRoot = clone:FindFirstChild("HumanoidRootPart") or clone:FindFirstChildOfClass("MeshPart")
+		local petRoot = getMonsterRoot(clone)
+		print("INI ADALAH PETROOT", petRoot, "DARI MONSTER ID", monsterId)
 		if not petRoot then
 			return
 		end
 
-		petRoot.CanCollide = false
-		petRoot.Anchored = false
-		petRoot.Massless = true
+		clone.PrimaryPart = petRoot
+
+		local rootParent = petRoot.Parent
+		if rootParent and rootParent:IsA("Model") then
+			for _, descendant in ipairs(rootParent:GetDescendants()) do
+				if descendant:IsA("BasePart") then
+					descendant.Anchored = false
+					descendant.CanCollide = false
+					descendant.Massless = true
+				end
+			end
+		else
+			petRoot.CanCollide = false
+			petRoot.Anchored = false
+			petRoot.Massless = true
+		end
 
 		local petAttachment = petRoot:FindFirstChild("PetAttachment")
 		if not petAttachment then
 			petAttachment = Instance.new("Attachment")
 			petAttachment.Name = "PetAttachment"
-			petAttachment.Orientation = Vector3.new(0, 180, 0)
 			petAttachment.Parent = petRoot
 		end
+		petAttachment.Orientation = Vector3.new(0, 0, 0)
 
 		local alignPos = Instance.new("AlignPosition")
 		alignPos.Mode = Enum.PositionAlignmentMode.OneAttachment
 		alignPos.Attachment0 = petAttachment
-		alignPos.MaxForce = 100000
+		alignPos.ApplyAtCenterOfMass = true
+		alignPos.RigidityEnabled = false
+		alignPos.MaxForce = 5000000
+		alignPos.MaxVelocity = 100000
 		alignPos.Responsiveness = 40
 		alignPos.Parent = petRoot
 
 		local alignOri = Instance.new("AlignOrientation")
 		alignOri.Mode = Enum.OrientationAlignmentMode.OneAttachment
 		alignOri.Attachment0 = petAttachment
-		alignOri.MaxTorque = 100000
+		alignOri.RigidityEnabled = false
+		alignOri.MaxTorque = 5000000
 		alignOri.Responsiveness = 30
 		alignOri.Parent = petRoot
 
@@ -97,17 +149,17 @@ function MonsterService:SpawnMonster(player, monsterGuid)
 			playerMonsterFolder.Parent = workspace
 		end
 
-		petRoot.CFrame = rootPart.CFrame * CFrame.new(0, 0, 3)
+		pivotModelRootTo(clone, petRoot, rootPart.CFrame * CFrame.new(0, 0, 3))
 
 		clone:SetAttribute("IsEquipped", true)
 		clone.Parent = playerMonsterFolder
 
 		local walkAnimation = Instance.new("Animation")
-		walkAnimation.AnimationId = "rbxassetid://72435867523649"
+		walkAnimation.AnimationId = MonsterConstants.Data[monsterId].AnimationId.Walking
 
 		local animController = clone:FindFirstChildOfClass("AnimationController")
 
-		if animController then
+		if animController and not walkAnimation.AnimationId then
 			local animator = animController:FindFirstChildOfClass("Animator")
 			if not animator then
 				animator = Instance.new("Animator")
@@ -131,13 +183,13 @@ function MonsterService:SpawnMonster(player, monsterGuid)
 end
 
 function MonsterService:UnequipMonster(player, monsterGuid, physicalCoinSlot: Part, coinSource: Model)
+	print(physicalCoinSlot)
 	if self.ActiveMonsters[player] and self.ActiveMonsters[player][monsterGuid] then
 		local monsterModel = self.ActiveMonsters[player][monsterGuid]
 
 		monsterModel:SetAttribute("IsEquipped", false)
 
-		local petRoot = monsterModel:FindFirstChildOfClass("MeshPart")
-			or monsterModel:FindFirstChild("HumanoidRootPart")
+		local petRoot = getMonsterRoot(monsterModel)
 
 		if petRoot then
 			petRoot:SetNetworkOwner(nil)
@@ -147,7 +199,7 @@ function MonsterService:UnequipMonster(player, monsterGuid, physicalCoinSlot: Pa
 
 			if alignPos and alignOri and physicalCoinSlot and coinSource and coinSource.PrimaryPart then
 				local basePosition = physicalCoinSlot.Position + Vector3.new(0, 3.5, 0)
-				local jumpPosition = basePosition + Vector3.new(0, 2, 0) -- Angka 2 adalah tinggi loncatan
+				local jumpPosition = basePosition + Vector3.new(0, 2, 0)
 
 				local sourcePos = coinSource.PrimaryPart.Position
 				local lookAtSourceFlat = Vector3.new(sourcePos.X, basePosition.Y, sourcePos.Z)
@@ -155,15 +207,9 @@ function MonsterService:UnequipMonster(player, monsterGuid, physicalCoinSlot: Pa
 				alignPos.MaxVelocity = 100000
 				alignOri.CFrame = CFrame.lookAt(basePosition, lookAtSourceFlat)
 
-				-- ==========================================
-				-- LOGIKA ANIMASI LONCAT
-				-- ==========================================
-
-				-- Konfigurasi Tween (Lompat = Sine Out agar melambat di atas, Jatuh = Sine In agar cepat ke bawah)
 				local jumpUpInfo = TweenInfo.new(0.25, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
 				local dropDownInfo = TweenInfo.new(0.25, Enum.EasingStyle.Sine, Enum.EasingDirection.In)
 
-				-- 1. Inisialisasi wadah animasi agar tidak error "nil"
 				if not self.CoinAnimations then
 					self.CoinAnimations = {}
 				end
@@ -172,33 +218,26 @@ function MonsterService:UnequipMonster(player, monsterGuid, physicalCoinSlot: Pa
 					CurrentTween = nil,
 				}
 
-				-- 2. Mulai Loop Loncatan
 				local animThread = task.spawn(function()
-					-- Loop akan berjalan selama monster belum di-equip lagi
 					while not monsterModel:GetAttribute("IsEquipped") and monsterModel.Parent do
-						-- A. LOMPAT NAIK
 						local jumpTween = TweenService:Create(alignPos, jumpUpInfo, { Position = jumpPosition })
 						self.CoinAnimations[monsterGuid].CurrentTween = jumpTween
 						jumpTween:Play()
 						jumpTween.Completed:Wait()
 
-						-- B. JATUH TURUN
 						local dropTween = TweenService:Create(alignPos, dropDownInfo, { Position = basePosition })
 						self.CoinAnimations[monsterGuid].CurrentTween = dropTween
 						dropTween:Play()
 						dropTween.Completed:Wait()
 
-						-- Jeda sebentar di lantai sebelum loncat lagi (opsional)
 						task.wait(0.1)
 					end
 
-					-- Bersihkan memori jika loop berhenti natural
 					if self.CoinAnimations[monsterGuid] then
 						self.CoinAnimations[monsterGuid] = nil
 					end
 				end)
 
-				-- 3. Simpan Thread
 				self.CoinAnimations[monsterGuid].Thread = animThread
 
 				print("Monster " .. monsterGuid .. " sedang menuju ke slot dan mulai loncat-loncat!")
@@ -214,8 +253,7 @@ function MonsterService:EquipMonster(player, monsterGuid)
 		monsterModel:SetAttribute("IsEquipped", true)
 		self:StopCoinAnimation(monsterGuid)
 
-		local petRoot = monsterModel:FindFirstChildOfClass("MeshPart")
-			or monsterModel:FindFirstChild("HumanoidRootPart")
+		local petRoot = getMonsterRoot(monsterModel)
 		if petRoot then
 			petRoot:SetNetworkOwner(player)
 		end

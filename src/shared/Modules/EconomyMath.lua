@@ -1,9 +1,9 @@
 local EconomyMath = {}
 
-EconomyMath.POWER_BASE_PRICE = 100
-EconomyMath.POWER_MULTIPLIER = 1.15
-EconomyMath.MINE_BASE_PRICE = 100
-EconomyMath.MINE_MULTIPLIER = 1.3
+EconomyMath.POWER_BASE_PRICE = 500
+EconomyMath.POWER_MULTIPLIER = 1.02
+EconomyMath.MINE_BASE_PRICE = 500
+EconomyMath.MINE_MULTIPLIER = 1.01
 EconomyMath.SUFFIXES = { "", "K", "M", "B", "T", "Qa", "Qi", "Sx", "Sp", "Oc", "No" }
 
 function EconomyMath.GetSingleLevelCost(basePrice, multiplier, currentLevel)

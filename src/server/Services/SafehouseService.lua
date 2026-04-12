@@ -2,15 +2,156 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerStorage = game:GetService("ServerStorage")
 local ProximityPromptService = game:GetService("ProximityPromptService")
 local CollectionService = game:GetService("CollectionService")
+local BadgeService = game:GetService("BadgeService")
 
 local Players = game:GetService("Players")
-local TouchInputService = game:GetService("TouchInputService")
 local Knit = require(ReplicatedStorage.Packages.Knit)
 local Signal = require(ReplicatedStorage.Packages.Signal)
 
 local SafehouseConstants = require(game.ReplicatedStorage.Shared.Constants.SafehouseConstants)
+local EggConstants = require(game.ReplicatedStorage.Shared.Constants.EggConstants)
+local MonsterConstants = require(game.ReplicatedStorage.Shared.Constants.MonsterConstants)
 
 local UpgradeAssets = ServerStorage.Assets.SafehouseUpgrades
+local EggAssets: Folder = ServerStorage:WaitForChild("Assets"):WaitForChild("Eggs")
+local MonsterAssets: Folder = ServerStorage:WaitForChild("Assets"):WaitForChild("Monsters")
+local EggTitleGuiTemplate = ServerStorage:WaitForChild("Assets"):WaitForChild("EggTitleGUI")
+local EggChanceGuiTemplate = ServerStorage:WaitForChild("Assets"):WaitForChild("EggChanceGUI")
+local MonsterTitleGuiTemplate = ServerStorage:WaitForChild("Assets"):WaitForChild("MonsterTitleGUI")
+local SAFEHOUSE_LEVEL2_BADGE_ID = 889148243617553
+
+local function tryAwardSafehouseLevel2Badge(player: Player)
+	local hasBadge = false
+	local hasBadgeOk, hasBadgeResult = pcall(function()
+		return BadgeService:UserHasBadgeAsync(player.UserId, SAFEHOUSE_LEVEL2_BADGE_ID)
+	end)
+
+	if hasBadgeOk then
+		hasBadge = hasBadgeResult == true
+	end
+
+	if hasBadge then
+		return
+	end
+
+	pcall(function()
+		BadgeService:AwardBadge(player.UserId, SAFEHOUSE_LEVEL2_BADGE_ID)
+	end)
+end
+
+local function attachEggTitleGui(eggModel: Model, eggId: string)
+	local eggRoot = eggModel.PrimaryPart or eggModel:FindFirstChildWhichIsA("BasePart", true)
+	if not eggRoot then
+		return
+	end
+
+	local eggConfig = EggConstants.Eggs[eggId]
+	local displayName = eggConfig and eggConfig.Name or eggId
+	local uiLevel = eggConfig and eggConfig.UILevel or ""
+	local uiRarity = eggConfig and eggConfig.UIRarity or ""
+	local finalName = displayName
+	if uiLevel ~= "" then
+		finalName ..= " " .. uiLevel
+	end
+
+	local titleGui = EggTitleGuiTemplate:Clone()
+	local mainFrame = titleGui:FindFirstChild("MainFrame", true)
+	local eggNameText = mainFrame and mainFrame:FindFirstChild("EggNameText", true)
+	local eggRarityText = mainFrame and mainFrame:FindFirstChild("EggRarityText", true)
+
+	if eggNameText and eggNameText:IsA("TextLabel") then
+		eggNameText.Text = finalName
+	end
+
+	if eggRarityText and eggRarityText:IsA("TextLabel") then
+		eggRarityText.Text = uiRarity
+	end
+
+	titleGui.Parent = eggRoot
+end
+
+local function attachEggChanceGui(eggModel: Model, eggId: string)
+	local eggRoot = eggModel.PrimaryPart or eggModel:FindFirstChildWhichIsA("BasePart", true)
+	if not eggRoot then
+		return
+	end
+
+	local eggConfig = EggConstants.Eggs[eggId]
+	if not eggConfig or type(eggConfig.HatchRates) ~= "table" then
+		return
+	end
+
+	local chanceGui = EggChanceGuiTemplate:Clone()
+	local mainFrame = chanceGui:FindFirstChild("MainFrame", true)
+	local scrollingFrame = mainFrame and mainFrame:FindFirstChild("ScrollingFrame", true)
+	local template = scrollingFrame and scrollingFrame:FindFirstChild("MonsterCardTemplate")
+	if not mainFrame or not scrollingFrame or not template or not template:IsA("GuiObject") then
+		chanceGui:Destroy()
+		return
+	end
+
+	template.Visible = false
+
+	local entries = {}
+	for monsterId, chance in pairs(eggConfig.HatchRates) do
+		table.insert(entries, { MonsterId = monsterId, Chance = chance })
+	end
+
+	table.sort(entries, function(a, b)
+		if a.Chance == b.Chance then
+			return a.MonsterId < b.MonsterId
+		end
+		return a.Chance > b.Chance
+	end)
+
+	for _, entry in ipairs(entries) do
+		local card = template:Clone()
+		card.Name = "Card_" .. entry.MonsterId
+		card.Visible = true
+
+		local monsterData = MonsterConstants.Data[entry.MonsterId]
+		local image = card:FindFirstChild("MonsterImage", true)
+		if image and image:IsA("ImageLabel") then
+			image.Image = (monsterData and monsterData.ImageId) or ""
+		end
+
+		local chanceText = card:FindFirstChild("ChanceText", true)
+		if chanceText and chanceText:IsA("TextLabel") then
+			chanceText.Text = tostring(entry.Chance) .. "%"
+		end
+
+		card.Parent = scrollingFrame
+	end
+
+	chanceGui.Parent = eggRoot
+end
+
+local function attachMonsterTitleGui(monsterModel: Model, monsterId: string)
+	local root = monsterModel.PrimaryPart
+	if not root then
+		return
+	end
+
+	local monsterData = MonsterConstants.Data[monsterId]
+	if not monsterData then
+		return
+	end
+
+	local titleGui = MonsterTitleGuiTemplate:Clone()
+	local mainFrame = titleGui:FindFirstChild("MainFrame", true)
+	local nameText = mainFrame and mainFrame:FindFirstChild("MonsterNameText", true)
+	local powerText = mainFrame and mainFrame:FindFirstChild("MonsterPowerText", true)
+
+	if nameText and nameText:IsA("TextLabel") then
+		nameText.Text = monsterData.Name or monsterId
+	end
+
+	if powerText and powerText:IsA("TextLabel") then
+		powerText.Text = tostring(monsterData.BaseMultiplier or 0) .. "x Power"
+	end
+
+	titleGui.Parent = root
+end
 
 local SafehouseService = Knit.CreateService({
 	Name = "SafehouseService",
@@ -36,9 +177,9 @@ function SafehouseService:KnitStart()
 	self.MonsterService = Knit.GetService("MonsterService")
 
 	Players.PlayerAdded:Connect(function(player)
-		-- if player.UserId ~= 703574111 then
-		-- 	return
-		-- end
+		if player.UserId ~= 703574111 then
+			return
+		end
 		self:AssignPlot(player)
 	end)
 
@@ -53,7 +194,6 @@ function SafehouseService:KnitStart()
 
 		if ownerName and slotIndex then
 			if player.Name ~= ownerName then
-				warn(player.Name .. " mencoba mengakses prompt milik " .. ownerName)
 				return
 			end
 
@@ -173,7 +313,6 @@ function SafehouseService:InitUpgradeSafehouse(player)
 
 	upgradeSafehousePrompt.Triggered:Connect(function(playerTrigger)
 		if playerTrigger ~= player then
-			warn(playerTrigger.Name .. " mencoba mengakses prompt milik " .. player.Name)
 			return
 		end
 
@@ -201,6 +340,10 @@ function SafehouseService:InitUpgradeSafehouse(player)
 
 		freshData.Money -= freshNextLevelConfig.UpgradeCost
 		freshData.SafehouseLevel = freshNextLevel
+
+		if freshNextLevel == 2 then
+			tryAwardSafehouseLevel2Badge(playerTrigger)
+		end
 
 		if self.DataService.NotifyDataChanged then
 			self.DataService:NotifyDataChanged(playerTrigger)
@@ -327,13 +470,15 @@ function SafehouseService:RefreshSafehousePhysicalSlots(player)
 		local physicalSlot = self:GetPhysicalSlot(player, slot)
 
 		if slotObj.Type == "Egg" then
-			local eggAsset: Model = game:GetService("ServerStorage").Eggs:FindFirstChild("BlueEgg")
+			local eggAsset = EggAssets:FindFirstChild(slotObj.Id)
 			if eggAsset then
 				local newEgg = eggAsset:Clone()
-				newEgg.Name = "PhysicalEgg"
+				newEgg.Name = slotObj.Id
 
 				newEgg:PivotTo(physicalSlot.CFrame * CFrame.new(0, 3.5, 0))
 				newEgg.Parent = physicalSlot
+				attachEggTitleGui(newEgg, slotObj.Id)
+				attachEggChanceGui(newEgg, slotObj.Id)
 
 				local hatchPrompt = Instance.new("ProximityPrompt")
 				hatchPrompt.Name = "HatchPrompt"
@@ -342,8 +487,8 @@ function SafehouseService:RefreshSafehousePhysicalSlots(player)
 				hatchPrompt.ActionText = "Hatch"
 				hatchPrompt.ObjectText = "Slot " .. tostring(slot)
 				hatchPrompt.RequiresLineOfSight = false
-				hatchPrompt.MaxActivationDistance = 6
-				hatchPrompt.HoldDuration = 1
+				hatchPrompt.MaxActivationDistance = 8
+				hatchPrompt.HoldDuration = 2
 
 				CollectionService:AddTag(hatchPrompt, "SafehousePrompt")
 				hatchPrompt:SetAttribute("OwnerName", player.Name)
@@ -370,9 +515,10 @@ function SafehouseService:ProcessHatch(player, slotIndex)
 	end
 
 	data.SafehouseSlots[slotIndex] = { Type = "Monster", Id = monsterHatched, MonsterGuid = monsterGuid }
+	self.DataService:NotifyDataChanged(player)
 
 	local physicalSlot = self:GetPhysicalSlot(player, slotIndex)
-	print("INI MARUPAKAN PHYSICAL SLOT ", physicalSlot)
+	print(physicalSlot) -- taruh ReplicatedStorage/Assets/Sounds/EggHatch (sound) dan ReplicatedStorage/Assets/VFX/HatchParticle (particle emitter) di dalam part ini (physicalslot (meshpart)) di controller client dan di play
 	if not physicalSlot then
 		return
 	end
@@ -380,7 +526,6 @@ function SafehouseService:ProcessHatch(player, slotIndex)
 	physicalSlot:ClearAllChildren()
 
 	self:ProcessMonsterSlot(player, physicalSlot, data, monsterGuid, slotIndex)
-	print("semua slot1 ", data.SafehouseSlots)
 end
 
 function SafehouseService:ProcessMonsterSlot(player, physicalSlot, data, monsterGuid, slotIndex)
@@ -389,12 +534,34 @@ function SafehouseService:ProcessMonsterSlot(player, physicalSlot, data, monster
 		return
 	end
 
-	local monsterAsset = game:GetService("ServerStorage").Monsters:FindFirstChild("Cat")
+	local monsterAsset = MonsterAssets:FindFirstChild(data.Monsters[monsterGuid].monsterId)
 	if monsterAsset then
 		local newMonster = monsterAsset:Clone()
-		newMonster.Name = "PhysicalMonster"
-		newMonster:PivotTo(physicalSlot.CFrame * CFrame.new(0, 3.5, 0))
+		newMonster.Name = data.Monsters[monsterGuid].monsterId
+
+		for _, descendant in ipairs(newMonster:GetDescendants()) do
+			if descendant:IsA("BasePart") then
+				descendant.CanCollide = false
+			end
+		end
+
+		local targetPosition = (physicalSlot.CFrame * CFrame.new(0, 3.5, 0)).Position
+		local facingPart = physicalSlot.Parent and physicalSlot.Parent:FindFirstChild("Facing")
+		if facingPart and facingPart:IsA("BasePart") then
+			local lookFlat =
+				Vector3.new(facingPart.Position.X - targetPosition.X, 0, facingPart.Position.Z - targetPosition.Z)
+
+			if lookFlat.Magnitude > 0.001 then
+				newMonster:PivotTo(CFrame.lookAt(targetPosition, targetPosition + lookFlat.Unit))
+			else
+				newMonster:PivotTo(CFrame.new(targetPosition))
+			end
+		else
+			newMonster:PivotTo(physicalSlot.CFrame * CFrame.new(0, 3.5, 0))
+		end
+
 		newMonster.Parent = physicalSlot
+		attachMonsterTitleGui(newMonster, newMonster.Name)
 
 		local promptAsset = game:GetService("ServerStorage").Assets:FindFirstChild("SlotPrompt")
 		if promptAsset then
@@ -482,14 +649,11 @@ function SafehouseService:GetCoinPlaceName(player, slotName)
 	end
 
 	for _, levelModel in ipairs(playerSafehouse:GetChildren()) do
-		print(levelModel)
 		if levelModel:IsA("Model") then
 			local coinPlaceFolder = levelModel:FindFirstChild("CoinPlace")
 
-			print(coinPlaceFolder)
 			if coinPlaceFolder then
 				local targetSlot = coinPlaceFolder:FindFirstChild(slotName)
-				print(targetSlot)
 				if targetSlot and targetSlot:FindFirstChild("Yellow") then
 					return targetSlot.Yellow, playerSafehouse.Level1.CoinSource
 				end

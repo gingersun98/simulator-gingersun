@@ -22,7 +22,7 @@ function EggService:KnitStart()
 end
 
 local function rollRarityFromEgg(eggId)
-	local eggData = EggConstants[eggId]
+	local eggData = EggConstants.Eggs[eggId]
 	if not eggData then
 		return nil
 	end
@@ -78,7 +78,7 @@ function EggService:CheckStarterEgg(player)
 		return
 	end
 
-	SafehouseService:GiveEggToSafehouse(player, "BasicEgg", nil)
+	SafehouseService:GiveEggToSafehouse(player, "Lv1EggGoat", nil)
 	profile.NewPlayer = false
 end
 
@@ -128,7 +128,8 @@ function EggService:ProcessDropoff(player, slot)
 		eggInstance:Destroy()
 
 		self.PlayerHoldingStates[player] = { State = "Idle", EggInstance = nil }
-		self.SafehouseService:GiveEggToSafehouse(player, "BasicEgg", slot)
+
+		self.SafehouseService:GiveEggToSafehouse(player, eggInstance.Name, slot)
 		self.SafehouseService:RefreshSafehousePhysicalSlots(player)
 
 		player:SetAttribute("IsHoldingEgg", false)

@@ -21,8 +21,8 @@ local SHATTER_CONFIG = {
 	ForwardForce = -40,
 	DownwardForce = -10,
 	Spread = 32,
-	FadeTime = 1.5,
-	DestroyTime = 1.5,
+	FadeTime = 1,
+	DestroyTime = 1,
 }
 
 local brokenWalls = {}
@@ -107,6 +107,11 @@ local function triggerShatter(wallArea: Instance)
 		if emitter and emitter:IsA("ParticleEmitter") then
 			emitter:Emit(1)
 		end
+	end
+
+	local sound = wall:FindFirstChild("WallDestroy")
+	if sound and sound:IsA("Sound") then
+		sound:Play()
 	end
 
 	for _ = 1, SHATTER_CONFIG.DebrisCount do

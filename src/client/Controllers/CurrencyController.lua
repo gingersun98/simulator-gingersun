@@ -1,6 +1,7 @@
 local Knit = require(game:GetService("ReplicatedStorage").Packages.Knit)
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
+local Workspace = game:GetService("Workspace")
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local EconomyMath = require(ReplicatedStorage.Shared.Modules.EconomyMath)
@@ -13,6 +14,10 @@ local PULSE_INTERVAL = 0.05
 local PULSE_UP_DURATION = 0.05
 local PULSE_DOWN_DURATION = 0.06
 local PULSE_BUMP_SCALE = 1.2
+local COLLECT_PARTICLE_COOLDOWN = 0.15
+local BUMP_PARTICLE_EMIT_COUNT = 6
+local MONEY_PARTICLE_EMIT_COUNT = 5
+local CLAIM_LOCK_COLOR = Color3.fromRGB(172, 57, 57)
 
 function CurrencyController:KnitStart()
 	local DataService = Knit.GetService("DataService")
@@ -28,9 +33,11 @@ function CurrencyController:KnitStart()
 		uiScale.Parent = currencyRoot
 	end
 
-	local function createAnimatedCounter(frameName, formatter)
-		local frame = currencyRoot:WaitForChild(frameName)
-		local textLabel = frame:WaitForChild("TextLabel")
+	local function createAnimatedCounter(textLabel, pulseScale, formatter)
+		if not pulseScale then
+			pulseScale = Instance.new("UIScale")
+			pulseScale.Parent = textLabel.Parent
+		end
 
 		local displayedValue = 0
 		local animationId = 0
@@ -74,7 +81,7 @@ function CurrencyController:KnitStart()
 					end
 
 					local upTween = TweenService:Create(
-						uiScale,
+						pulseScale,
 						TweenInfo.new(PULSE_UP_DURATION, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
 						{ Scale = PULSE_BUMP_SCALE }
 					) :: Tween
@@ -86,7 +93,7 @@ function CurrencyController:KnitStart()
 					end
 
 					local downTween = TweenService:Create(
-						uiScale,
+						pulseScale,
 						TweenInfo.new(PULSE_DOWN_DURATION, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
 						{ Scale = 1 }
 					) :: Tween
@@ -141,7 +148,7 @@ function CurrencyController:KnitStart()
 				setText(displayedValue)
 				TweenService
 					:Create(
-						uiScale,
+						pulseScale,
 						TweenInfo.new(0.08, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
 						{ Scale = 1 }
 					)
@@ -155,28 +162,179 @@ function CurrencyController:KnitStart()
 		return animateTo
 	end
 
-	local animateMoneyTo = createAnimatedCounter("Money", function(value)
+	local moneyFrame = currencyRoot:WaitForChild("Money")
+	local powerFrame = currencyRoot:WaitForChild("Power")
+	local mineFrame = currencyRoot:WaitForChild("Mine")
+
+	local animateMoneyTo = createAnimatedCounter(moneyFrame:WaitForChild("TextLabel"), uiScale, function(value)
 		return EconomyMath.FormatNumber(value)
 	end)
 
-	local animatePowerLevelTo = createAnimatedCounter("Power", function(value)
+	local animatePowerLevelTo = createAnimatedCounter(powerFrame:WaitForChild("TextLabel"), uiScale, function(value)
 		return tostring(value)
 	end)
 
-	local animateMiningLevelTo = createAnimatedCounter("Mine", function(value)
+	local animateMiningLevelTo = createAnimatedCounter(mineFrame:WaitForChild("TextLabel"), uiScale, function(value)
 		return tostring(value)
 	end)
+
+	local pendingMoneyAnimator = nil
+	local pendingMoneyLabel = nil
+	local pendingBindConnection = nil
+	local collectTouchConnection = nil
+	local collectTouchPart = nil
+	local lastCollectParticleAt = 0
+	local latestPendingMoney = 0
+
+	local function bindCollectParticles(collectPart: BasePart)
+		if collectTouchPart == collectPart and collectTouchConnection then
+			return
+		end
+
+		if collectTouchConnection then
+			collectTouchConnection:Disconnect()
+			collectTouchConnection = nil
+		end
+
+		collectTouchPart = collectPart
+
+		collectTouchConnection = collectPart.Touched:Connect(function(hit)
+			local character = player.Character
+			if not character then
+				return
+			end
+
+			if not hit or not hit:IsDescendantOf(character) then
+				return
+			end
+
+			if latestPendingMoney <= 0 then
+				return
+			end
+
+			if collectPart.Color == CLAIM_LOCK_COLOR then
+				return
+			end
+
+			local now = tick()
+			if now - lastCollectParticleAt < COLLECT_PARTICLE_COOLDOWN then
+				return
+			end
+			lastCollectParticleAt = now
+
+			local bump = collectPart:FindFirstChild("BumpParticle", true)
+			if bump and bump:IsA("ParticleEmitter") then
+				bump:Emit(BUMP_PARTICLE_EMIT_COUNT)
+			end
+
+			local money = collectPart:FindFirstChild("MoneyParticle", true)
+			if money and money:IsA("ParticleEmitter") then
+				money:Emit(MONEY_PARTICLE_EMIT_COUNT)
+			end
+
+			local claimSound = collectPart:FindFirstChild("CollectSound", true)
+			if claimSound and claimSound:IsA("Sound") then
+				claimSound:Play()
+			end
+		end)
+	end
+
+	local function tryBindPendingMoneyGui()
+		if pendingMoneyLabel and pendingMoneyLabel.Parent and pendingMoneyAnimator then
+			if pendingBindConnection then
+				pendingBindConnection:Disconnect()
+				pendingBindConnection = nil
+			end
+			return
+		end
+
+		pendingMoneyAnimator = nil
+		pendingMoneyLabel = nil
+
+		local safehouseFolder = Workspace:FindFirstChild("Safehouse_" .. player.Name, true)
+		if not safehouseFolder then
+			return
+		end
+
+		local collectPart = safehouseFolder:FindFirstChild("Green", true)
+		if not collectPart or not collectPart:IsA("BasePart") then
+			return
+		end
+
+		bindCollectParticles(collectPart)
+
+		local upgradeGui = collectPart:FindFirstChild("UpgradeSafehouseGUI")
+		if not upgradeGui or not upgradeGui:IsA("BillboardGui") then
+			return
+		end
+
+		local mainFrame = upgradeGui:FindFirstChild("MainFrame")
+		local contentFrame = mainFrame and mainFrame:FindFirstChild("Frame")
+		local collectText = contentFrame and contentFrame:FindFirstChild("CollectText")
+		if not mainFrame or not contentFrame or not collectText or not collectText:IsA("TextLabel") then
+			return
+		end
+
+		mainFrame.Visible = true
+
+		local pendingScale = contentFrame:FindFirstChild("UIScale")
+		if not pendingScale then
+			pendingScale = Instance.new("UIScale")
+			pendingScale.Parent = contentFrame
+		end
+
+		pendingMoneyLabel = collectText
+		pendingMoneyAnimator = createAnimatedCounter(collectText, pendingScale, function(value)
+			return EconomyMath.FormatNumber(value)
+		end)
+
+		if pendingBindConnection then
+			pendingBindConnection:Disconnect()
+			pendingBindConnection = nil
+		end
+	end
+
+	tryBindPendingMoneyGui()
+	if not pendingMoneyAnimator then
+		pendingBindConnection = Workspace.DescendantAdded:Connect(function(descendant)
+			if pendingMoneyAnimator then
+				if pendingBindConnection then
+					pendingBindConnection:Disconnect()
+					pendingBindConnection = nil
+				end
+				return
+			end
+
+			if
+				descendant.Name == ("Safehouse_" .. player.Name)
+				or descendant.Name == "Green"
+				or descendant.Name == "UpgradeSafehouseGUI"
+			then
+				task.defer(tryBindPendingMoneyGui)
+			end
+		end)
+	end
 
 	local function animateCurrencyFields(data)
 		if not data then
 			return
 		end
 
+		latestPendingMoney = data.PendingMoney or 0
+
 		animateMoneyTo(data.Money or 0)
 
 		local upgrades = data.Upgrades or {}
 		animatePowerLevelTo(upgrades.PowerLevel or 1)
 		animateMiningLevelTo(upgrades.MiningLevel or 1)
+
+		if not pendingMoneyAnimator then
+			tryBindPendingMoneyGui()
+		end
+
+		if pendingMoneyAnimator then
+			pendingMoneyAnimator(latestPendingMoney)
+		end
 	end
 
 	DataService:GetData()

@@ -1,107 +1,147 @@
--- Const
-local BACKGROUND_COLOR = Color3.new(1, 1, 1)
-local PROGRESS_BAR_BG_COLOR = Color3.new(0, 0, 0) -- Black background
-local PROGRESS_BAR_FILL_COLOR = Color3.new(1, 1, 1) -- White fill
-local PROGRESS_BAR_POSITION = UDim2.fromScale(0.5, 0.48)
-local PROGRESS_BAR_SIZE = UDim2.fromScale(1.8, 0.6) -- Made it a bit bigger
-local PROGRESS_BAR_CORNER_RADIUS = UDim.new(0, 5)
-local TEXT_POSITION = UDim2.fromScale(0.5, 0.6)
-local TEXT_SIZE = UDim2.fromScale(0.9, 0.94)
-local TEXT_FONT_SIZE = 18
-
--- Creating Loading Screen
-local LoadingUI = Instance.new("ScreenGui")
-LoadingUI.DisplayOrder = 5
-LoadingUI.IgnoreGuiInset = true
-LoadingUI.Name = "LoadingUI"
-
--- Background frame (now just a frame for the blur)
-local ImageLabelBackground = Instance.new("Frame")
-ImageLabelBackground.Parent = LoadingUI
-ImageLabelBackground.Name = "ImageLabelBackground"
-ImageLabelBackground.BackgroundColor3 = Color3.new(0, 0, 0)
-ImageLabelBackground.BackgroundTransparency = 0
-ImageLabelBackground.Size = UDim2.new(1, 0, 1, 0)
-
-local BottomLeftImage = Instance.new("ImageLabel")
-BottomLeftImage.Parent = ImageLabelBackground
-BottomLeftImage.Name = "BottomLeftImage"
-BottomLeftImage.Size = UDim2.fromScale(0.32, 0.42)
-BottomLeftImage.BackgroundTransparency = 1
-BottomLeftImage.Position = UDim2.fromScale(0.35, 0.7)
-
-local UIAspectRatio = Instance.new("UIAspectRatioConstraint")
-UIAspectRatio.AspectRatio = 2.83
-UIAspectRatio.Parent = BottomLeftImage
-
--- Fill bar background
-local Background = Instance.new("Frame")
-Background.Name = "Background"
-Background.Parent = BottomLeftImage
-Background.BackgroundColor3 = PROGRESS_BAR_BG_COLOR
-Background.AnchorPoint = Vector2.new(0.5, 0.5)
-Background.BorderColor3 = Color3.fromRGB(255, 255, 255)
-Background.BorderSizePixel = 3
-Background.Position = PROGRESS_BAR_POSITION
-Background.Size = PROGRESS_BAR_SIZE
-
-local UICorner = Instance.new("UICorner")
-UICorner.CornerRadius = PROGRESS_BAR_CORNER_RADIUS
-UICorner.Parent = Background
-
-local UIStroke = Instance.new("UIStroke")
-UIStroke.Parent = Background
-UIStroke.Color = Color3.fromRGB(255, 255, 255) -- White border
-UIStroke.Thickness = 2
-
--- Fill bar
-local Fill = Instance.new("Frame")
-Fill.Name = "Fill"
-Fill.Parent = Background
-Fill.BackgroundColor3 = PROGRESS_BAR_FILL_COLOR
-Fill.AnchorPoint = Vector2.new(0, 0.5)
-Fill.Position = UDim2.new(0, 0, 0.5, 0)
-Fill.Size = UDim2.new(0, 0, 1, 0)
-
-local fillUICorner = Instance.new("UICorner")
-fillUICorner.CornerRadius = PROGRESS_BAR_CORNER_RADIUS
-fillUICorner.Parent = Fill
-
--- Text
-local TextLabel = Instance.new("TextLabel")
-TextLabel.Parent = BottomLeftImage
-TextLabel.BackgroundTransparency = 1
-TextLabel.Text = "Loading..."
-TextLabel.AnchorPoint = Vector2.new(0.5, 0.5)
-TextLabel.Position = TEXT_POSITION
-TextLabel.Size = TEXT_SIZE
-TextLabel.TextSize = TEXT_FONT_SIZE
-TextLabel.FontFace = Font.fromEnum(Enum.Font.FredokaOne)
-TextLabel.TextColor3 = Color3.fromRGB(155, 155, 155)
-
-local UIAspectRatio = Instance.new("UIAspectRatioConstraint")
-UIAspectRatio.AspectRatio = 2.83
-UIAspectRatio.Parent = TextLabel
-
--- wait for the loading screen
+local ReplicatedFirst = game:GetService("ReplicatedFirst")
 local Players = game:GetService("Players")
-local player = Players.LocalPlayer
-local playerGUI = player:WaitForChild("PlayerGui", 10)
-LoadingUI.Parent = playerGUI
+local TweenService = game:GetService("TweenService")
 
--- Function to clean up when loading is done
-local function cleanupLoading()
-	if LoadingUI and LoadingUI.Parent then
-		LoadingUI:Destroy()
+pcall(function()
+	ReplicatedFirst:RemoveDefaultLoadingScreen()
+end)
+
+local localPlayer = Players.LocalPlayer
+if not localPlayer then
+	return
+end
+
+local playerGui = localPlayer:WaitForChild("PlayerGui")
+local loadingTemplate = script:FindFirstChild("LoadingGUI") or ReplicatedFirst:FindFirstChild("LoadingGUI")
+
+if not loadingTemplate or not loadingTemplate:IsA("ScreenGui") then
+	warn("LoadingGUI not found in ReplicatedFirst")
+	return
+end
+
+local loadingGui = loadingTemplate
+if loadingGui.Parent ~= playerGui then
+	loadingGui = loadingTemplate:Clone()
+	loadingGui.Parent = playerGui
+end
+
+local frame = loadingGui:FindFirstChild("Frame")
+if not frame or not frame:IsA("Frame") then
+	warn("LoadingGUI.Frame not found")
+	loadingGui:Destroy()
+	return
+end
+
+local skipButton = frame:FindFirstChild("SkipButton")
+local imageLabel = frame:FindFirstChild("ImageLabel")
+local loadingText = frame:FindFirstChild("LoadingText")
+
+if skipButton and skipButton:IsA("GuiObject") then
+	skipButton.Visible = false
+end
+
+local running = true
+local closeRequested = false
+
+local rotationTween
+if imageLabel and imageLabel:IsA("ImageLabel") then
+	local rotateInfo = TweenInfo.new(0.7, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true)
+	rotationTween = TweenService:Create(imageLabel, rotateInfo, { Rotation = 12 })
+	rotationTween:Play()
+end
+
+if loadingText and loadingText:IsA("TextLabel") then
+	local baseText = string.gsub(loadingText.Text, "%.+$", "")
+	if baseText == "" then
+		baseText = "Loading"
+	end
+
+	task.spawn(function()
+		local dotSequence = { 3, 2, 1, 2 }
+		local index = 1
+		while running and loadingText.Parent do
+			local dotCount = dotSequence[index]
+			loadingText.Text = baseText .. string.rep(".", dotCount)
+			index += 1
+			if index > #dotSequence then
+				index = 1
+			end
+			task.wait(0.3)
+		end
+	end)
+end
+
+if skipButton and (skipButton:IsA("TextButton") or skipButton:IsA("ImageButton")) then
+	skipButton.Activated:Connect(function()
+		closeRequested = true
+	end)
+end
+
+task.delay(5, function()
+	if not running then
+		return
+	end
+
+	if skipButton and skipButton:IsA("GuiObject") then
+		skipButton.Visible = true
+	end
+
+	task.delay(2, function()
+		if running then
+			closeRequested = true
+		end
+	end)
+end)
+
+while not closeRequested do
+	task.wait(0.1)
+	if not loadingGui.Parent then
+		running = false
+		return
 	end
 end
 
-task.wait(0.1)
+running = false
+if rotationTween then
+	rotationTween:Cancel()
+end
 
--- Remove the default loading screen
-game.ReplicatedFirst:RemoveDefaultLoadingScreen()
+local fadeTweens = {}
+local fadeInfo = TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 
-return {
-	GUI = LoadingUI,
-	Cleanup = cleanupLoading,
-}
+local function queueFade(instance)
+	local goals = {}
+
+	if instance:IsA("GuiObject") then
+		goals.BackgroundTransparency = 1
+	end
+
+	if instance:IsA("TextLabel") or instance:IsA("TextButton") or instance:IsA("TextBox") then
+		goals.TextTransparency = 1
+		goals.TextStrokeTransparency = 1
+	end
+
+	if instance:IsA("ImageLabel") or instance:IsA("ImageButton") then
+		goals.ImageTransparency = 1
+	end
+
+	if instance:IsA("UIStroke") then
+		goals.Transparency = 1
+	end
+
+	if next(goals) ~= nil then
+		table.insert(fadeTweens, TweenService:Create(instance, fadeInfo, goals))
+	end
+end
+
+queueFade(frame)
+for _, descendant in ipairs(frame:GetDescendants()) do
+	queueFade(descendant)
+end
+
+for _, tween in ipairs(fadeTweens) do
+	tween:Play()
+end
+
+task.wait(0.55)
+loadingGui:Destroy()

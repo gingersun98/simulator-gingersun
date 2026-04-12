@@ -5,14 +5,10 @@ local Knit = require(ReplicatedStorage.Packages.Knit)
 
 local player = Players.LocalPlayer
 
--- ==========================================
--- FORMATION SETTINGS (TWEAK THESE VALUES)
--- ==========================================
-local PET_HEIGHT = 0.2 -- How high the pets float
-local BASE_DISTANCE = 9.0 -- Distance from player to the first row (Z)
-local ROW_SPACING = 4.5 -- Distance between front row and back row (Z)
-local X_SPACING = 3 -- Distance between pets side-by-side (X)
--- ==========================================
+local PET_HEIGHT = 5
+local BASE_DISTANCE = 9.0
+local ROW_SPACING = 4.5
+local X_SPACING = 3
 
 local FORMATIONS = {
 	[1] = {
@@ -48,13 +44,39 @@ local MonsterController = Knit.CreateController({
 	LerpSpeed = 7,
 })
 
+local function getControlledRoot(monsterModel: Model): BasePart?
+	for _, descendant in ipairs(monsterModel:GetDescendants()) do
+		if descendant:IsA("BasePart") then
+			local hasAlignPos = descendant:FindFirstChild("AlignPosition")
+			local hasAlignOri = descendant:FindFirstChild("AlignOrientation")
+			if hasAlignPos and hasAlignOri then
+				return descendant
+			end
+		end
+	end
+
+	local humanoidRoot = monsterModel:FindFirstChild("HumanoidRootPart")
+	if humanoidRoot and humanoidRoot:IsA("BasePart") then
+		return humanoidRoot
+	end
+
+	if monsterModel.PrimaryPart then
+		return monsterModel.PrimaryPart
+	end
+
+	local anyPart = monsterModel:FindFirstChildWhichIsA("BasePart", true)
+	if anyPart and anyPart:IsA("BasePart") then
+		return anyPart
+	end
+
+	return nil
+end
+
 function MonsterController:KnitStart()
-	-- Mulai loop pergerakan fisika saat game berjalan
 	RunService.RenderStepped:Connect(function(dt)
 		self:UpdateMonsters(dt)
 	end)
 
-	-- Cleanup memori TargetCFrames jika model monster dihancurkan/dihapus server
 	workspace.DescendantRemoving:Connect(function(descendant)
 		if self.TargetCFrames[descendant] then
 			self.TargetCFrames[descendant] = nil
@@ -78,8 +100,6 @@ function MonsterController:UpdateMonsters(dt)
 		return
 	end
 
-	-- === PERUBAHAN DI SINI ===
-	-- Saring hanya monster yang sedang "Equipped"
 	local equippedMonsters = {}
 	for _, monsterModel in ipairs(playerMonsterFolder:GetChildren()) do
 		if monsterModel:GetAttribute("IsEquipped") == true then
@@ -96,10 +116,8 @@ function MonsterController:UpdateMonsters(dt)
 	local smoothFactor = 1 - math.exp(-self.LerpSpeed * dt)
 	local currentFormation = FORMATIONS[monsterCount] or FORMATIONS[5]
 
-	-- Looping menggunakan daftar monster yang sudah disaring
 	for i, monsterModel in ipairs(equippedMonsters) do
-		local petRoot = monsterModel:FindFirstChildOfClass("MeshPart")
-			or monsterModel:FindFirstChild("HumanoidRootPart")
+		local petRoot = getControlledRoot(monsterModel)
 		if not petRoot then
 			continue
 		end

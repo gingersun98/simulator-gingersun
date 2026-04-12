@@ -35,6 +35,9 @@ function MiningService:SetupCoinCollector(player, physicalSafehouse)
 		physicalSafehouse:WaitForChild("Level1"):WaitForChild("CollectCoin"):WaitForChild("Green")
 
 	local isCollecting = false
+	local CLAIM_DEBOUNCE = 2
+	local CLAIM_LOCK_COLOR = Color3.fromRGB(172, 57, 57)
+	local defaultColor = collectPart.Color
 
 	collectPart.Touched:Connect(function(hit)
 		if isCollecting then
@@ -47,6 +50,7 @@ function MiningService:SetupCoinCollector(player, physicalSafehouse)
 		if hitPlayer and hitPlayer == player then
 			if data.PendingMoney > 0 then
 				isCollecting = true
+				collectPart.Color = CLAIM_LOCK_COLOR
 
 				local amountCollected = data.PendingMoney
 
@@ -54,9 +58,8 @@ function MiningService:SetupCoinCollector(player, physicalSafehouse)
 				data.PendingMoney = 0
 				self.DataService:NotifyDataChanged(player)
 
-				print("Total uang sekarang: " .. data.Money)
-
-				task.wait(1)
+				task.wait(CLAIM_DEBOUNCE)
+				collectPart.Color = defaultColor
 				isCollecting = false
 			end
 		end
@@ -79,7 +82,7 @@ function MiningService:ProcessMining()
 				local constantData = MonsterConstants.Data[monsterId]
 
 				if constantData then
-					local monsterPower = playerMineLevel * constantData.BaseMultiplier * 100
+					local monsterPower = playerMineLevel * constantData.BaseMultiplier
 					totalIncomeThisSecond += monsterPower
 				end
 			end
@@ -87,6 +90,7 @@ function MiningService:ProcessMining()
 
 		if totalIncomeThisSecond > 0 then
 			profile.PendingMoney += totalIncomeThisSecond
+			self.DataService:NotifyDataChanged(player)
 			-- print(player.Name .. " earned " .. totalIncomeThisSecond .. " money from mining! Total: " .. profile.Money)
 		end
 	end

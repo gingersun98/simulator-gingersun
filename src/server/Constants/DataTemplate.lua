@@ -1,5 +1,5 @@
 return {
-	Money = 0,
+	Money = 1000,
 	PendingMoney = 0,
 
 	CurrentLayer = 1,
@@ -9,7 +9,7 @@ return {
 
 	Upgrades = {
 		PowerLevel = 1,
-		MiningLevel = 1,
+		MiningLevel = 30,
 		SafehouseLevel = 1,
 	},
 

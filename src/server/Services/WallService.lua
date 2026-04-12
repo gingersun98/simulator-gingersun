@@ -448,7 +448,6 @@ function WallService:RemoveEggFromTracking(areaName, eggInstance)
 end
 
 function WallService:StartDamageLoop()
-	print(self.ActiveBreakers)
 	task.spawn(function()
 		while true do
 			for player, wallId in pairs(self.ActiveBreakers) do
@@ -523,7 +522,10 @@ function WallService:RecalculatePlayerDamage(player)
 		end
 	end
 
-	self.PlayerActiveDamage[player] = totalDamage + playerPower
+	if totalDamage > 0 then
+		self.PlayerActiveDamage[player] = totalDamage + playerPower
+		return
+	end
 end
 
 function WallService:ResetAllWalls(player)

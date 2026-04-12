@@ -177,9 +177,9 @@ function SafehouseService:KnitStart()
 	self.MonsterService = Knit.GetService("MonsterService")
 
 	Players.PlayerAdded:Connect(function(player)
-		if player.UserId ~= 703574111 then
-			return
-		end
+		-- if player.UserId ~= 703574111 then
+		-- 	return
+		-- end
 		self:AssignPlot(player)
 	end)
 
